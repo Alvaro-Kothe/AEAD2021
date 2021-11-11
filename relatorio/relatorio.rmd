@@ -1,0 +1,57 @@
+---
+title: ""
+author: "Álvaro Kothe"
+output:
+    bookdown::pdf_document2:
+        number_sections: false
+        toc: false
+editor_options: 
+  chunk_output_type: console
+header-includes:
+   - \usepackage[brazil]{babel}
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, warning = FALSE, message = FALSE,
+  fig.align = "center", out.width = "70%", fig.pos = "!ht",
+  fig.width = 6, fig.height = 4
+)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+
+library(Matrix) # Criar SparseMatrix para os digitos
+library(caret) # Ferramentas de ML, como imputar e padronizar.
+library(dplyr) # Manipulação de dados
+library(forcats) # Manipulação de fatores
+library(ggplot2) # Gráficos
+library(glmnet) # Ajuste de modelos lineares com regularização
+library(glue) # Função para escrever dentro de strings
+library(kableExtra) # ferramentas para criacao de tabelas
+library(keras) # Ajuste de redes neurais
+library(knitr) # ferramentas para geracao de relatorios em markdown
+library(randomForest) # Ajuste de modelos de floresta aleatória
+library(tibble) # Tabelas mais flexíveis
+library(tidyr) # Manipulação de dados
+library(xgboost) # Ajuste de modelos de bagging
+options(keras.view_metrics = FALSE)
+theme_set(theme_light())
+```
+
+```{r}
+meunome <- "Alvaro"
+nusp <- "13030061"
+```
+
+
+```{r mnist, eval=FALSE, child="mnist.rmd", include=FALSE}
+```
+
+\pagebreak
+
+
+```{r sf, child="sf2.rmd"}
+```

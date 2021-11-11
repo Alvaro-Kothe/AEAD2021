@@ -1,0 +1,394 @@
+## Dados de dígitos manuscritos
+
+
+```{r carrega mnist}
+load("../dados/dados_mnist.rdata")
+```
+
+
+
+
+```{r separa treino validacao}
+# Cria os índices para treino e validação para a comparação dos modelos
+set.seed(1)
+
+perc_val <- .25
+n <- nrow(x_treino)
+idx_val <- sample(seq_len(n), n * perc_val)
+
+idx_tr <- setdiff(seq_len(n), idx_val)
+```
+
+No conjunto de dados de dígitos manuscritos, temos 60000 dígitos escritos a mão em imagens de dimensão $28 \times 28$. O conjunto de dados foi separado em conjunto de treino e validação, onde `r perc_val * 100`\% dos dados foi utilizado como conjunto de validação, ou seja, uma amostra de `r length(idx_tr)` dígitos será utilizada para construir os modelos, e os dígitos restantes serão utilizados para avaliar a qualidade de ajuste dos modelos.
+
+Em seguida os pixels foram normalizados para a escala $[0, 1],$ (equivalente a por a imagem na escala de cinza) para que alguns dos modelos utilizados convirja mais rápido. 
+
+```{r}
+# Como as matrizes das imagens possuem muito zero, uma matriz esparsa é
+# apropriada para poupar espaço. Mas será utilizada apenas no glmnet.
+x_treino <- x_treino / 255.
+x_mnist_sparse <- Matrix(x_treino, sparse = TRUE)
+y_treino <- factor(y_treino, levels = 0:9)
+```
+
+Com os dados normalizados e separados em conjunto de treino e teste, serão construídos três modelos para realizar as predições das imagens:
+
+- Lasso Multinomial
+- Boosting
+- Rede Neural Convolucional
+
+### Modelo linear com regularização
+
+Como o problema é diferenciar 10 dígitos utilizando 784 pixels, isso indica que o problema é de classificação com mais de duas classes. Logo, será ajustado um modelo multinomial. E como diversos pixels geralmente não são preenchidos para escrever os pixels, é interessante realizar selecionar os pixels importantes. Por isso, será ajustado um modelo Lasso Multinomial. Para a escolha do parâmetro de penalização foi gerado 100 hiper-parâmetros de penalização, e foi escolhido o melhor hiper-parâmetro através de validação cruzada utilizando apenas o conjunto de treino.
+
+
+
+```{r modelo cv lasso mnist}
+if (!file.exists("../modelos/fit_mnist_lasso_cv.rds")) {
+  # Devido a demora para ajustar esse modelo, ele ficará salvo no computador
+  # para poupar o tempo de ajusta-lo novamente
+  set.seed(2)
+  fit_mnist_lasso_cv <- cv.glmnet(
+    x_mnist_sparse[-idx_val, ], y_treino[-idx_val],
+    family = "multinomial", type.measure = "class", # regressão multinomial
+    nfolds = 5, # 5 validações cruzadas
+    parallel = TRUE # Utiliza paralelização para acelear o ajuste.
+  )
+  saveRDS(fit_mnist_lasso_cv, "../modelos/fit_mnist_lasso_cv.rds")
+} else {
+  fit_mnist_lasso_cv <- readRDS("../modelos/fit_mnist_lasso_cv.rds")
+}
+```
+
+
+```{r lasso mnist}
+# Como apresentado na aula de lasso, após selecionado o lambda,
+# ajusta o modelo com todos os dados de treino
+if (!file.exists("../modelos/fit_mnist_lasso.rds")) {
+  # Também para poupar tempo, o modelo ficará salvo no computador
+
+  fit_mnist_lasso <- glmnet(
+    x_mnist_sparse[-idx_val, ], y_treino[-idx_val],
+    family = "multinomial", type.measure = "class", # regressão multinomial
+    # Ajustar com os mesmos lambdas para não soltar erro no ajuste.
+    lambda = fit_mnist_lasso_cv$lambda
+  )
+
+  saveRDS(fit_mnist_lasso, "../modelos/fit_mnist_lasso.rds")
+} else {
+  fit_mnist_lasso <- readRDS("../modelos/fit_mnist_lasso.rds")
+}
+```
+
+
+
+```{r pred lasso}
+pred_las_f <- predict(fit_mnist_lasso,
+  x_mnist_sparse[idx_val, ],
+  s = fit_mnist_lasso_cv$lambda.min,
+  type = "class"
+)
+
+pred_las_d <- predict(fit_mnist_lasso,
+  x_mnist_sparse[-idx_val, ],
+  s = fit_mnist_lasso_cv$lambda.min,
+  type = "class"
+)
+
+acuracias_mnist <- tibble(
+  Modelo = "Multinomial Lasso",
+  "Acurácia Dentro" = mean(pred_las_d == y_treino[-idx_val]),
+  "Acurácia Fora" = mean(pred_las_f == y_treino[idx_val])
+)
+```
+
+Na figura \@ref(fig:pixels-importantes-lasso) é apresentado os pixels que não foram nulos para a classificação de cada dígito, com o dígito referente em verde no canto superior esquerdo de cada imagem.
+
+```{r pixels-importantes-lasso, fig.cap="Pixels não nulos para cada dígito pelo modelo lasso."}
+plot_mnist <- function(x, text = NULL, col = "white", tx = .05, ty = .95) {
+  matriz <- matrix(x, ncol = 28, byrow = TRUE)
+
+  imagem <- t(apply(matriz, 2, rev))
+
+  image(imagem, col = grey.colors(255), axes = FALSE)
+  text(tx, ty, col = col, cex = 1.2, text)
+
+  return(imagem)
+}
+
+# pega os coeficientes diferentes de zero, sem intercepto
+coef_nnulo <- lapply(
+  coef(fit_mnist_lasso, s = fit_mnist_lasso_cv$lambda.min),
+  function(x) (x != 0)[-1, ]
+)
+
+# Coloca os gráficos em um grid 2x5
+layout(matrix(1:10, nrow = 2, byrow = TRUE))
+par(mar = c(.1, .1, .1, .1), xaxs = "i", yaxs = "i")
+
+
+invisible(
+  mapply(plot_mnist, x = coef_nnulo, text = names(coef_nnulo), col = "green")
+)
+```
+
+Pela Figura \@ref(fig:pixels-importantes-lasso), é possível ver os principais pixels para a classificação de cada desenho. Pode-se notar que a partir dos pixels não nulos, é possível desenhar o dígito que deseja-se classificar.
+
+### Modelo baseado em árvore
+
+Existe vários tipos possíveis de modelos baseados em árvore que podem ser utilizados. Porém, para casos de classificação de imagem, mais especificamente a classificação de dígitos do MNIST, modelos de *boosting* conseguem oferecer um bom ajuste. Por conta disso, será ajustado um modelo de boosting utilizando o pacote [XGBoost](https://xgboost.ai/).
+
+
+
+Para este modelo foi ajustado um modelo em que a profundidade máxima de cada árvore é 6. O número de árvores foi controlado pelo conjunto de validação, porém foi definido que o número máximo de árvores seria 500. Além disso, foi utilizada uma taxa de aprendizagem $\eta=0,1$. A taxa de aprendizagem foi um dos únicos hiper-parâmetros que ao fazer uma alteração do padrão ($\eta = 0,3$) forneceu uma melhora na acurácia no conjunto de validação. Porém essa melhora foi ínfima.
+
+```{r xgboost mnist, cache=TRUE, include=FALSE}
+# XGBoost pede que a variável resposta entre como numérica. É definido dentro
+# dos parâmetros que o objetivo do modelo é classificação de 10 classes.
+y_treino_num <- as.integer(as.character(y_treino))
+
+
+dtrain <- xgb.DMatrix(x_mnist_sparse[idx_tr, ], label = y_treino_num[idx_tr])
+dval <- xgb.DMatrix(x_mnist_sparse[idx_val, ], label = y_treino_num[idx_val])
+
+params <- list(
+  objective = "multi:softmax", # Classificação
+  num_class = 10, # 10 classes (digitos 0 a 9)
+  eval_metric = "mlogloss", # entropia de multiplas classes
+  eta = .1, # taxa de aprendizagem
+  max_depth = 6, # A profundidade máxima da árvore
+  nthread = parallel::detectCores() - 1 # número de processadores lógicos
+  # utilizados.
+)
+
+# Argumento para controlar o número de árvores do modelo a partir do conjunto
+# de validação. Isso evita *overfitting*.
+watchlist <- list(train = dtrain, eval = dval)
+
+set.seed(1234)
+
+xgboost_mnist <- xgb.train(
+  params,
+  dtrain,
+  watchlist = watchlist,
+  nrounds = 500, # Máximo de iterações
+  early_stopping_rounds = 5, # Parar após 5 iterações sem melhora
+  print_every_n = 10
+)
+```
+
+
+```{r pred xgboost}
+acuracias_mnist <- acuracias_mnist %>%
+  add_row(
+    Modelo = "Boosting",
+    "Acurácia Fora" = mean(
+      predict(xgboost_mnist, x_mnist_sparse[idx_val, ]) == y_treino[idx_val]
+    ),
+    "Acurácia Dentro" = mean(
+      predict(xgboost_mnist, x_mnist_sparse[idx_tr, ]) == y_treino[idx_tr]
+    )
+  )
+```
+
+
+
+### Redes neurais
+
+Para o modelo de rede neural, foi ajustado um modelo de rede neural convolucional. A estrutura da rede escolhida foi
+
+- camada convolucional com 32 filtros e janela deslizante $5 \times 5$ e ativação relu;
+- camada de `max_pooling` de dimensão $2 \times 2$;
+- outra camada convolucional, só que desta vez foi aplicado 64 filtros;
+- outra camada de `max_pooling`;
+- camada de `dropout` com taxa de retirada de 25\%;
+- camada de achatamento (`flatten`);
+- camada `dense` com 128 neurônios e ativação relu;
+- camada de `dropout` com taxa de retirada de 10\%;
+- camada `dense` com 64 neurônios e ativação sigmóide;
+- a última camada é uma `dense` com ativação softmax de 10 neurônios para classificar o dígito.
+
+
+
+
+
+```{r mnist array}
+dim_imagem <- 28
+# array_reshape funciona igual ao numpy.reshape
+# -1 indica que a dimensão será o que sobrar para completar o array.
+x_treino_ar <-
+  array_reshape(x_treino[idx_tr, ], c(-1, dim_imagem, dim_imagem, 1))
+x_val_ar <-
+  array_reshape(x_treino[idx_val, ], c(-1, dim_imagem, dim_imagem, 1))
+
+y_treino_tc <- to_categorical(y_treino_num[idx_tr], 10)
+y_val_tc <- to_categorical(y_treino_num[idx_val], 10)
+```
+
+```{r rede neural convolucional}
+input_shape <- c(dim_imagem, dim_imagem, 1)
+batch_size <- 64
+epochs <- 50
+
+tensorflow::set_random_seed(42)
+
+rn_mnist <- keras_model_sequential() %>%
+  layer_conv_2d(
+    filters = 32, kernel_size = c(5, 5), activation = "relu",
+    input_shape = input_shape
+  ) %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_conv_2d(filters = 64, kernel_size = c(5, 5), activation = "relu") %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_dropout(.25) %>%
+  layer_flatten() %>%
+  layer_dense(128, "relu") %>%
+  layer_dropout(.1) %>%
+  layer_dense(64, "sigmoid") %>%
+  layer_dense(units = 10, activation = "softmax")
+
+rn_mnist %>% compile(
+  loss = loss_categorical_crossentropy,
+  optimizer = optimizer_adam(),
+  metrics = c("accuracy")
+)
+
+callbacks <- list(
+  callback_early_stopping(patience = 5, restore_best_weights = TRUE)
+)
+
+historico <- rn_mnist %>% fit(
+  x_treino_ar, y_treino_tc,
+  batch_size = batch_size,
+  epochs = epochs,
+  callbacks = callbacks,
+  validation_data = list(x_val_ar, y_val_tc)
+)
+```
+
+Para evitar *overfitting* foram utilizadas 2 camadas de `dropout`, e foi utilizado o conjunto de validação para definir um critério de parada. Os pesos foram ajustados em lotes de tamanho `r batch_size` com o otimizador `adam`. Os parâmetros escolhidos para o otimizador foram os definidos por padrão pelo `keras`.
+
+```{r pred-rede, cache=TRUE}
+
+pred_mnist_rn_val <- predict(rn_mnist, x_val_ar) %>%
+  k_argmax() %>%
+  as.integer()
+
+pred_mnist_rn_treino <- predict(rn_mnist, x_treino_ar) %>%
+  k_argmax() %>%
+  as.integer()
+
+acuracias_mnist <- acuracias_mnist %>%
+  add_row(
+    Modelo = "Rede Neural Convolucional",
+    "Acurácia Fora" = mean(
+      pred_mnist_rn_val == y_treino[idx_val]
+    ),
+    "Acurácia Dentro" = mean(
+      pred_mnist_rn_treino == y_treino[idx_tr]
+    )
+  )
+```
+
+## Comparação dos modelos
+
+Para a comparação dos modelos iremos utilizar a acurácia. Na Tabela \@ref(tab:tabela-modelos) é apresentado a acurácia para o conjunto de treino (Acurácia Dentro) e validação (Acurácia Fora).
+
+```{r tabela-modelos}
+kable(acuracias_mnist,
+  caption = "Acurácias dos modelos ajustados.",
+  booktabs = TRUE, linesep = ""
+) %>%
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+
+Podemos ver pela Tabela \@ref(tab:tabela-modelos) que o modelo de rede neural foi o que teve as melhores predições no conjunto de validação. Também notamos que o modelo de Boosting foi capaz de predizer perfeitamente no conjunto de treino, o que mostra que esse modelo conseguiu decorar o conjunto de treino. Porém, conseguiu predizer corretamente na maior parte no conjunto de validação.
+
+Como o modelo de rede neural convolucional foi o que teve a maior acurácia no conjunto de validação, ele será o modelo escolhido para realizar as predições no conjunto de teste. Para apresentar um pouco das predições do modelo escolhida, na Figura \@ref(fig:matriz-confusao-rede) é apresentado a matriz de confusão do modelo no conjunto de validação.
+
+```{r matriz-confusao-rede, fig.cap="Matriz de confusão para o modelo de rede neural convolucional para o conjunto de dados de validação."}
+confusion_matrix <- as.data.frame(
+  table(
+    predito = pred_mnist_rn_val,
+    verdadeiro = y_treino[idx_val]
+  )
+)
+
+ggplot(confusion_matrix, aes(verdadeiro, predito)) +
+  geom_tile(aes(fill = Freq), show.legend = FALSE) +
+  geom_text(aes(label = Freq), color = "black") +
+  scale_fill_gradient(low = "white", high = "dodgerblue3", trans = "log1p") +
+  labs(x = "Observado", y = "Predito") +
+  theme_minimal()
+```
+
+Pela Figura \@ref(fig:matriz-confusao-rede), não se percebe um dígito em que o modelo apresentou dificuldades de prever.
+
+Na Figura \@ref(fig:rn-plt-pred) se encontram algumas predições no conjunto de validação. As predições corretas estão na cor verde, e as incorretas estão na cor vermelha, com a predição correta dentro dos parênteses.
+
+```{r rn-plt-pred, fig.cap="Amostra das classificações da rede neural para o conjunto de validação."}
+set.seed(1)
+
+total_graficos <- 6 * 6
+prop_incorretos <- .25
+graficos_incorretos <- floor(total_graficos * prop_incorretos)
+graficos_corretos <- total_graficos - graficos_incorretos
+
+# Pega índices de predições corretas e incorretas
+idx_plot <- sample(c(
+  sample(which(pred_mnist_rn_val != y_treino[idx_val]), graficos_incorretos),
+  sample(which(pred_mnist_rn_val == y_treino[idx_val]), graficos_corretos)
+))
+
+# Define as cores para as predições corretas e incorretas
+cores <- ifelse(idx_plot %in% which(pred_mnist_rn_val == y_treino[idx_val]),
+  "green", "red"
+)
+
+# Texto nos gráficos
+texto <- ifelse(idx_plot %in% which(pred_mnist_rn_val == y_treino[idx_val]),
+  pred_mnist_rn_val[idx_plot],
+  paste0(
+    pred_mnist_rn_val[idx_plot], "(",
+    y_treino[idx_val][idx_plot], ")"
+  )
+)
+
+# Cria lista de matrizes para plotar
+plot_matrixes <- lapply(
+  idx_val[idx_plot],
+  function(x) x_treino[x, ]
+)
+
+layout(matrix(seq_len(total_graficos),
+  nrow = sqrt(total_graficos),
+  byrow = TRUE
+))
+par(mar = c(.1, .1, .1, .1))
+
+
+invisible(
+  mapply(plot_mnist,
+    x = plot_matrixes,
+    text = texto, col = cores, tx = .9, ty = .1
+  )
+)
+```
+
+Pela Figura \@ref(fig:rn-plt-pred), nota-se  que o modelo de rede neural errou principalmente em dígitos em que a escrita não ficou clara. Porém, nota-se alguns dígitos facilmente reconhecíveis em que o modelo falhou em classificar corretamente.
+
+```{r}
+load("../dados/dados_mnist_teste.rdata")
+
+# Transforma o conjunto de treino para a predição
+x_teste_ar <- array_reshape(x_teste / 255., c(-1, dim_imagem, dim_imagem, 1))
+
+predicoes <- predict(rn_mnist, x_teste_ar) %>%
+  k_argmax() %>%
+  as.integer()
+
+write.csv(data.frame(y_pred = predicoes),
+  file = glue("mnist_{nusp}_{meunome}.csv")
+)
+```
