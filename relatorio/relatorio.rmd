@@ -1,6 +1,6 @@
 ---
 title: ""
-author: "Álvaro Kothe"
+author: ""
 output:
     bookdown::pdf_document2:
         number_sections: false
@@ -53,5 +53,5 @@ nusp <- "13030061"
 \pagebreak
 
 
-```{r sf, child="sf2.rmd"}
+```{r sf, child="sf.rmd"}
 ```

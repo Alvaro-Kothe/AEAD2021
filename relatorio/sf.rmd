@@ -1,13 +1,15 @@
 ## Dados de chuva e vazão no Rio São Francisco
 
+
+o que fazer:
+- Heatmap
+- Densidades
+- Apresentar o exemplo do skit-learn
+
 ```{r dados sao francisco}
-load("../dados/dados_sao_francisco.rdata")
+load("../dados/dados_rio_sf.rdata")
 ```
 
-```{r}
-# Garante que o dados estão ordenados de forma cronológica.
-dados_treino <- arrange(dados_treino, data_ini)
-```
 
 No conjunto de dados sobre a vazão no rio são francisco, temos `r nrow(dados_treino)` semanas de coletas de vazão e precipitação de diversas estações. O objetivo é predizer a vazão na estação 46998000 na semana seguinte.
 
@@ -20,42 +22,23 @@ O conjunto de dados possui diversas informações faltando, e comparado ao conju
 
 
 
-### Imputação de dados
+### Correção de assimetria e escala
+
+É recomendado realizar transformações nas variáveis para que elas sejam normalmente distribuídas. O pacote *scikit-learn* fez um [exemplo](https://scikit-learn.org/stable/auto_examples/compose/plot_transformed_target.html#sphx-glr-auto-examples-compose-plot-transformed-target-py) para apresentar as vantagens de construir os modelos com a variável resposta transformada e em seguida realiza a transformação inversa para obter melhores predições.
+
+A Figura \@ref(fig:grafico-densidade-vazao) apresenta as densidades das vazões e precipitações das estações até o quantil de 90\% para melhor visualização.
 
 
-Na figura \@ref(fig:vazoes-faltando) é apresentado a quantidade de vazões faltando por estação. Nota-se que a vazão que tem a maior quantidade de vazões faltando é a qual desejamos fazer previsões.
-
-```{r vazoes-faltando, fig.cap="Vazões faltando por estação."}
-# Apresenta percentual de NAs
-colunas_vazoes <- grep("\\d+", colnames(dados_treino), value = TRUE)
-
-
-dados_vazoes_longo <- dados_treino %>%
+```{r grafico-densidade-vazao, fig.cap="Gráfico de densidades das estações, utilizando até o quantil 90\\% de todas as vazões."}
+# retira vazões muito altas para melhorar a visibilidade do gráfico
+dados_vazoes_longo <- treino_sf %>%
   pivot_longer(
-    all_of(colunas_vazoes),
+    everything(),
     names_to = "estacao",
     values_to = "vazao"
   )
 
-dados_vazoes_longo %>%
-  group_by(estacao) %>%
-  summarise(nna = sum(is.na(vazao))) %>%
-  filter(nna > 0) %>%
-  mutate(
-    estacao = fct_reorder(estacao, nna),
-    resposta = estacao == codigo_estacao_resposta
-  ) %>%
-  ggplot(aes(estacao, nna, fill = resposta)) +
-  geom_col(alpha = .9, width = .4, show.legend = FALSE) +
-  labs(x = "Estação", y = "Vazões faltando") +
-  scale_fill_manual(values = c("darkred", "darkblue")) +
-  coord_flip()
-``` 
 
-Geralmente, em problemas de séries temporais, a imputação seria utilizando o valor prévio a informação faltando na série. Porém, considerando que o conjunto de teste não é constituído de uma janela futura aos dados de treino, os dados faltantes serão imputados utilizando a média ou a mediana, e isso será considerado a partir do gráfico de densidade das vazões apresentado na Figura \@ref(fig:grafico-densidade-vazao).
-
-```{r grafico-densidade-vazao, fig.cap="Gráfico de densidades das estações, utilizando até o quantil 90\\% de todas as vazões."}
-# retira vazões muito altas para melhorar a visibilidade do gráfico
 dados_vazoes_longo %>%
   filter(vazao < quantile(vazao, .90, na.rm = TRUE)) %>%
   ggplot(aes(vazao, color = estacao, fill = estacao)) +
@@ -64,38 +47,38 @@ dados_vazoes_longo %>%
 ```
 
 
-
-```{r separa-treino-validacao, include=FALSE}
-estacoes_treino_imput <- dados_treino[, colunas_vazoes]
-
-median_imputer <- preProcess(estacoes_treino_imput, method = "medianImpute")
-```
-
-
-
-Pela Figura \@ref(fig:grafico-densidade-vazao), nota-se que geralmente as vazões são assimétricas para a direita. Por isso, será utilizado a mediana para imputar por ser uma medida mais robusta do que a média.
-
-A partir do conjunto de treino disponibilizado, foi obtido o valor da mediana para cada estação para ser utilizado na imputação. 
-
-### Correção de assimetria e escala
-Também seria interessante realizar uma transformação vazões e precipitações. Na Figura \@ref(fig:densidade-resp) é apresentado a densidade da estação resposta (sem imputar).
+Na Figura \@ref(fig:densidade-resp) é apresentado a densidade da variável que deseja-se estimar.
 
 ```{r densidade-resp, fig.cap="Gráfico de densidade da estação resposta"}
-ggplot(dados_treino, aes_(as.name(codigo_estacao_resposta))) +
+ggplot(treino_sf, aes(Y)) +
   geom_density() +
   labs(
-    x = glue("Vazão da estação {codigo_estacao_resposta}"),
+    x = "Vazão da estação 46998000",
     y = "Densidade"
   )
 ```
 
-Pelas Figuras \@ref(fig:grafico-densidade-vazao) e \@ref(fig:densidade-resp), nota-se as vazões são bastante assimétricas. Será aplicado a transformação $\log(x + 1)$ em todas as vazões e precipitações para reduzir a assimetria.
+Pelas Figuras \@ref(fig:grafico-densidade-vazao) e \@ref(fig:densidade-resp), nota-se as vazões são bastante assimétricas. Por isso, será aplicado a transformação $\log(x + 1)$ em todas as vazões e precipitações para reduzir a assimetria. Na figura \@ref(fig:densidades-transformadas) são apresentadas todas as vazões e precipitações transformadas das estações preditoras e a vazão da variável resposta.
+
+```{r densidades-transformadas, fig.cap="Gráfico de densidade das variáveis transformadas.", fig.subcap=c("Todas as estações", "Variável resposta"), out.width="50%"}
+
+dados_vazoes_longo %>%
+  ggplot(aes(log1p(vazao), color = estacao, fill = estacao)) +
+  geom_density(show.legend = FALSE, alpha = .3) +
+  labs(x = "Vazão", y = "Densidade")
+
+ggplot(treino_sf, aes(log1p(Y))) +
+  geom_density() +
+  labs(
+    x = "Vazão da estação 46998000",
+    y = "Densidade"
+  )
+```
+Nota-se pela \@ref(fig:densidades-transformadas), que a transformação $\log(x+1)$ conseguiu reduzir bastante a assimetria.
 
 ```{r}
-# Completa o conjunto de treino
-estacoes_treino_imput <- predict(median_imputer, estacoes_treino_imput)
 # Transforma
-x_trans <- log1p(as.matrix(estacoes_treino_imput))
+x_trans <- log1p(as.matrix(treino_sf[, -1]))
 ```
 
 Em seguida, para remover o efeito da escala das vazões e precipitações, essas medidas foram padronizadas.
@@ -104,39 +87,21 @@ Em seguida, para remover o efeito da escala das vazões e precipitações, essas
 ```{r}
 # padroniza
 standardizer <- preProcess(x_trans, method = c("center", "scale"))
-x_ <- predict(standardizer, x_trans)
+x_treino <- predict(standardizer, x_trans)
+y_treino = log1p(treino_sf[,1])
 ```
 
 
 
-```{r}
-shift_ <- function(x, k = 1) {
-  n <- nrow(x)
-  pad <- matrix(NA, k, ncol(x))
-  rbind(pad, x[1:(n - k), ])
-}
-
-x_lag <- shift_(x_, 1)
 
 
-y_ <- log1p(dados_treino[[codigo_estacao_resposta]])
+Para a predição da estação 46998000, será utilizado apenas os dados das vazões da semana anterior, incluindo a vazão da própria estação 46998000. Além disso, mesmo que os dados estejam padronizados, a vazão da semana seguinte será predita com a transformação $\log(x+1)$. Para conjunto de teste será aplicado a transformação $\exp(x) - 1$ nas predições para que a vazão seja apresentada na escala original.
 
-# Retira aonde a vazao de interesse não foi informada e o primeiro índice
-# para compensar pela defasagem.
-vazoes_nao_ajustadas <- union(1, which(is.na(y_)))
-
-
-x_treino <- x_lag[-vazoes_nao_ajustadas, ]
-y_treino <- y_[-vazoes_nao_ajustadas]
-```
-
-Para a predição da estação `r codigo_estacao_resposta`, será utilizado apenas os dados das vazões da semana anterior, incluindo a vazão da própria estação `r codigo_estacao_resposta`. Porém, não haverá ajuste nem comparação quando a vazão da estação `r codigo_estacao_resposta` não for informada. Além disso, mesmo que os dados estejam padronizados, a vazão da semana seguinte será predita com a transformação $\log(x+1)$, mas no conjunto de teste será aplicado a transformação $\exp(x) - 1$ nas predições para que a vazão seja apresentada na escala original.
-
-Para ilustrar as transformações feitas, e o que será utilizado para ajustar os modelos, na Tabela \@ref(tab:matriz-x) é apresentado as 6 primeiras observações do conjunto de treinamento, em que na primeira coluna tem-se a vazão da semana seguinte que deseja-se prever com a transformação $\log(x+1)$.  As demais colunas são as 6 primeiras colunas das vazões da semana anterior já imputadas pela mediana, transformadas e padronizadas.
+Para ilustrar as transformações feitas, e o que será utilizado para ajustar os modelos, na Tabela \@ref(tab:matriz-x) é apresentado as 6 primeiras observações do conjunto de treinamento, em que na primeira coluna tem-se a vazão da semana seguinte que deseja-se prever com a transformação $\log(x+1)$.  As demais colunas são as 6 primeiras colunas das vazões da semana anterior já transformadas e padronizadas.
 
 ```{r matriz-x}
 cbind(
-  "Vazão da semana seguinte transformada" = y_treino,
+  "$\\log(Y + 1)$" = y_treino,
   x_treino[, 1:6]
 ) %>%
   head(6) %>%
@@ -147,7 +112,7 @@ cbind(
       "com a primeira coluna sendo a variável resposta transformada",
       "(vazão da semana seguinte)."
     ),
-    booktabs = TRUE, linesep = ""
+    booktabs = TRUE, linesep = "", escape = TRUE, digits = 3
   ) %>%
   kable_styling(latex_options = c("striped", "hold_position"))
 ```
@@ -155,7 +120,9 @@ cbind(
 
 ### Ajuste dos modelos
 
-Como já definido, os modelos serão comparados por validação cruzada. Os modelos que serão ajustados são:
+Como já definido, os modelos serão comparados por validação cruzada. O método de validação cruzada escolhido foi o *k-folds*, com $k=10$, ou seja, será utilizado 9 amostras para ajustar os modelos, e uma amostra para validação. Esse processo será repetido 10 vezes. A medida utilizada para comparar os modelos será o erro médio absoluto.
+
+Os modelos que serão ajustados são:
 
 - Modelos lineares com regularização:
     - Lasso
@@ -171,9 +138,9 @@ cv_folds <- 10
 folds <- sample(1:10, size = length(y_treino), replace = TRUE)
 ```
 
-Para os modelos de Lasso e Ridge, primeiro foi escolhido o melhor parâmetro de penalização através da validação cruzada.
 
-Detalhar muito mais sobre cada modelo
+Para os modelos de Lasso e Ridge, primeiro foi escolhido o melhor parâmetro de penalização através da validação cruzada, utilizando as mesmas amostras já definidas pelo *k-fold*. Em seguida, dado os parâmetros de penalização que apresentaram o menor erro de validação cruzada, foi feito novamente a validação cruzada para obter o erro médio absoluto de cada *fold*
+
 
 ```{r}
 lambda_lasso <-
@@ -193,7 +160,7 @@ lambda_ridge <-
 ```{r}
 scores <- list()
 
-# Função util  para obter os erros de validação cruzada.
+# Realiza a validação cruzada e obtém os erros absolutos médios.
 cv_mae <- function(modelo, x, y, folds, ...) {
   unique_folds <- unique(folds)
   sapply(unique_folds, function(fold) {
@@ -215,21 +182,27 @@ cv_mae <- function(modelo, x, y, folds, ...) {
 ```
 
 
+Maior parte do modelo de floresta aleatória foi ajustado com os valores padrão da função `randomForest` do pacote com o mesmo nome. Mas para previnir sobreajuste foi definido que a profundidade máxima de cada árvore seria 15.
+
+O modelo de Boosting consegue facilmente sobreajustar os dados de treino. Porém, o pacote XGBoost fornece diversos hiper-parâmetros para controlar o ajuste. Por isso foi utilizada uma taxa de aprendizagem $\eta = 0.01$,  profundidade máxima da árvore 4, em cada árvore utilizava apenas 70\% das observações e dos preditores. Além disso, a perda mínima para a prolongar a árvore seria 0.6, foi utilizada regularização de primeira ordem e foi utilizado o número de árvores igual a 1000.
+
+
 ```{r scores, cache=TRUE}
 
 set.seed(115)
 
-scores[["Lasso"]] <- cv_mae(glmnet, x_treino, y_treino,
-  folds,
+scores[["Lasso"]] <- cv_mae(glmnet,
+                            x_treino, y_treino,  folds,
   alpha = 1, lambda = lambda_lasso
 )
-scores[["Ridge"]] <- cv_mae(glmnet, x_treino, y_treino,
-  folds,
+scores[["Ridge"]] <- cv_mae(glmnet,
+                            x_treino, y_treino,  folds,
   alpha = 0, lambda = lambda_ridge
 )
 
-scores[["Floresta Aleatória"]] <- cv_mae(randomForest, x_treino, y_treino, folds,
-  ntree = 500, maxnodes = 15
+scores[["Floresta Aleatória"]] <- cv_mae(randomForest,
+  x_treino, y_treino, folds,
+  maxnodes = 15
 )
 
 
@@ -245,20 +218,23 @@ params <- list(
   # utilizados.
 )
 
-scores[["Boosting"]] <- cv_mae(xgboost, x_treino, y_treino, folds,
+scores[["Boosting"]] <- cv_mae(xgboost,
+                               x_treino, y_treino, folds,
   nrounds = 1000, params = params, verbose = 0
 )
 ```
 
+Para o modelo de redes neurais, utilizou-se um modelo simples que foi é treinado em 50 épocas em lotes de tamanho 64 (`batch_size`). A estrutura do modelo é:
+
+- camada `dense` com 128 neurônios e ativação sigmóide;
+- camada `dense` com 64 neurônios e ativação sigmóide;
+- a última camada é uma `dense` com ativação linear;
 
 ```{r rede-neural}
 cria_rede_sf <- function() {
   modelo <- keras_model_sequential() %>%
-    layer_dense(1024, activation = "relu", input_shape = ncol(x_treino)) %>%
-    layer_dropout(.2) %>%
-    layer_dense(512, activation = "relu") %>%
-    layer_dropout(.1) %>%
-    layer_dense(256, activation = "relu") %>%
+    layer_dense(128, activation = "sigmoid", input_shape = ncol(x_treino)) %>%
+    layer_dense(64, activation = "sigmoid") %>%
     layer_dense(1)
 
   modelo %>%
@@ -270,7 +246,7 @@ cria_rede_sf <- function() {
 
 tensorflow::set_random_seed(1234)
 
-# Não consegui aplicar a minha função para o keras, logo será manual
+# Não consegui aplicar a minha função para o keras, logo será feito na mao
 scores[["Rede Neural"]] <- sapply(unique(folds), function(fold) {
   idx_val <- folds == fold
 
@@ -289,13 +265,20 @@ scores[["Rede Neural"]] <- sapply(unique(folds), function(fold) {
 })
 ```
 
+### Comparação dos modelos
+
+Com a validação cruzada foi obtido diversos erros quadráticos médios para os modelos ajustados. Na Figura \@ref(fig:boxplot-scores) essas medidas são apresentadas em um boxplot, com a média sendo apresentada em um ponto em vermelho. E na Tabela \@ref(tab:media-scores) é apresentado a média e o desvio padrão estimados para cada modelo.
+
 ```{r boxplot-scores, fig.cap="Boxplot do erro médio absoluto por modelo pela validação cruzada."}
 scores_tbl <- bind_cols(scores) %>%
   pivot_longer(everything(), names_to = "Modelo", values_to = "mae")
 scores_tbl %>%
   ggplot(aes(Modelo, mae)) +
   geom_boxplot() +
-  stat_summary(fun = mean, geom = "point", shape = 20, size = 2, color = "red") +
+  stat_summary(
+    fun = mean, geom = "point", shape = 20,
+    size = 2, color = "red"
+  ) +
   labs(x = "Modelo", y = "Erro Médio Absoluto") +
   coord_flip()
 ```
@@ -304,19 +287,37 @@ scores_tbl %>%
 scores_tbl %>%
   group_by(Modelo) %>%
   summarise(
-    Média = mean(mae),
-    Desvio = sd(mae)
+    media = mean(mae),
+    desvio = sd(mae)
   ) %>%
-  arrange(Média) %>%
+  arrange(media) %>%
   kable(
     caption = paste(
       "Média e desvio do erro médio absoluto",
       "dos modelos pela validação cruzada"
     ),
+    col.names = c("Modelo", "Média", "Desvio"),
     booktabs = TRUE, linesep = ""
   ) %>%
   kable_styling(latex_options = c("striped", "hold_position"))
 ```
+
+Nota-se que dos modelos ajustados, o modelo de redes neurais foi o que teve o pior ajuste e a maior variabilidade pela validação cruzada. Os modelos baseados em árvore foram os que apresentaram os erros mais consistentes pela validação cruzada, e os que apresentaram o melhor ajuste no geral foram o modelo de Boosting e o Lasso.
+
+
+
+### Escolha do modelo
+
+Geralmente para ter melhores predições, as predições dos vários modelos de *machine learning* são misturadas. Existem diversas formas de misturar as predições, desde tomar a média delas, até construir modelos sobre essas predições.
+
+
+Todos os modelos foram ajustados novamente utilizando todo o conjuto de treino. E para as predições finais, será utilizada a média ponderada de todos os modelos ajustados, em que os pesos serão definidos a partir da performance pela validação.
+
+Após tomar a média ponderada será utilizada a transformação $\exp(x) - 1$ na média ponderada para que a vazão predita esteja na escala original da variável resposta. Logo, as predições no conjunto de teste são dadas por:
+\[\hat y = \exp\{0.25 \hat y_{B} + 0.25 \hat y_{L} +
+0.25 \hat y_{F} + 0.2 \hat y_{R} + 0.05 \hat y_{RN}\} - 1,\]
+onde $\hat y_{B}, \hat y_{L}, \hat y_{F}, \hat y_{R}, \hat y_{RN},$ são as predições de Boosting, Lasso, Floresta aleatória, Ridge e Rede Neural, respectivamente.
+
 
 
 ```{r}
@@ -328,20 +329,36 @@ xgboost_full <- xgboost(x_treino, y_treino,
   verbose = 0
 )
 
+rn_full = cria_rede_sf()
+rn_full %>% fit(x_treino, y_treino, verbose = 0, 
+                batch_size = 64, epochs = 50)
+
+
 mistura_predicoes <- function(x) {
-  .3 * predict(xgboost_full, x) +
-    .25 * predict(rf_full, x) +
+ predicao =  .25 * predict(xgboost_full, x) +
     .25 * predict(lasso_full, x) +
-    .2 * predict(ridge_full, x)
+    .25 * predict(rf_full, x) +
+    .2 * predict(ridge_full, x) +
+        .05 * predict(rn_full, x) 
+ 
+ # Evita que a predicao saia como matriz ou dataframe por causa do lasso
+ if (is.matrix(predicao) || is.data.frame(predicao)) {
+ return(as.vector(predicao))
+ }
+ predicao
 }
 ```
 
-### Escolha do modelo
+```{r}
+x_teste = as.matrix(teste_sf[, colnames(x_treino)]) %>%
+    log1p() %>% # Realiza a transformação log(x+1)
+    predict(standardizer, .) # Padroniza
 
-Pela Figura \@ref(fig:boxplot-scores) e Tabela \@ref(tab:media-scores), os melhores modelos foram o Lasso, Ridge, Floresta Aleatória e Boosting, que apresentaram erro baixo e pouca variabilidade  pela validação cruzada. Por isso, para as predições, será tomado a média ponderada do valor predito para esses modelos. Em seguida será aplicado a transformação $\exp(x) - 1$ na média ponderada para devolver a vazão predita para a escala original. Ou seja, as predições do conjunto de teste será dada por
-\[\hat y = \exp\{0.3 \hat y_{B} + 0.25 \hat y_{F} +
-0.25 \hat y_{L} + 0.2 \hat y_{R}\} - 1,\]
-onde $\hat y_{B}, \hat y_{F}, \hat y_{L}, \hat y_{R},$ são as predições de Boosting, Floresta aleatória, Lasso e Ridge, respectivamente.
+predicoes = expm1(mistura_predicoes(x_teste))
+
+write.csv(data.frame(y_pred = predicoes), file = glue("sf_{nusp}_{meunome}.csv"))
+```
+```
 
 
-justificar
+
