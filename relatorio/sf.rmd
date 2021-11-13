@@ -1,46 +1,44 @@
 ## Dados de chuva e vazão no Rio São Francisco
 
 
-o que fazer:
-- Heatmap
-- Densidades
-- Apresentar o exemplo do skit-learn
-
 ```{r dados sao francisco}
 load("../dados/dados_rio_sf.rdata")
 ```
 
 Na Figura \@ref(fig:resp-lag) é apresentado o gráfico de dispersão da estação resposta contra a sua defasagem de primeira ordem.
-```{r rep-lag, fig.cap="Gráfico da resposta contra a sua defasagem."}
+```{r resp-lag, fig.cap="Gráfico da resposta contra a sua defasagem."}
 ggplot(treino_sf, aes(`46998000`, Y)) +
-    geom_point() +
-    geom_smooth(method="lm", se=FALSE) +
-    labs(y = "Resposta", x = "Lag_1")
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(y = "Resposta", x = "Lag_1")
 ```
 
 ```{r corplot, fig.cap="Heatmap das variáveis com a maior correlação com a variável resposta."}
 
-n_var = 15
+n_var <- 15
 
-corr = cor(treino_sf, use = "pairwise.complete.obs")
+corr <- cor(treino_sf, use = "pairwise.complete.obs")
 # Ordena pela correlação com a variável resposta `Y`
 
 cor_srted <- order(abs(corr[, "Y"]), decreasing = TRUE)[seq_len(n_var)]
 
 corplot <- corr[cor_srted, cor_srted]
 
-corrplot.mixed(corplot, tl.pos = "lt", tl.col = "black",
-               number.cex = .6)
+corrplot.mixed(corplot,
+  tl.pos = "lt", tl.col = "black",
+  number.cex = .6
+)
 ```
 
 ```{r eval=FALSE, include=FALSE}
-estacoes %>% filter(estacao_codigo %in% colnames(corplot)[1:6]) %>%
-    head()
+estacoes %>%
+  filter(estacao_codigo %in% colnames(corplot)[1:6]) %>%
+  head()
 ```
-Todas as bacias que apresentaram correlação acima de 0.9 pertencem ao rio são francisco.
+Todas as bacias que apresentaram correlação acima de 0.9 com a variável resposta `Y`, pertencem ao rio são francisco.
 
 
-No conjunto de dados sobre a vazão no rio são francisco, temos `r nrow(dados_treino)` semanas de coletas de vazão e precipitação de diversas estações. O objetivo é predizer a vazão na estação 46998000 na semana seguinte.
+No conjunto de dados sobre a vazão no rio são francisco, temos `r nrow(treino_sf)` semanas de coletas de vazão e precipitação de diversas estações. O objetivo é predizer a vazão na estação 46998000 na semana seguinte.
 
 O conjunto de dados possui diversas informações faltando, e comparado ao conjunto de dados de dígitos MNIST, não possui muitas observações. Por isso, para o tratamento e seleção de modelos será considerado a seguinte abordagem:
 
@@ -141,7 +139,7 @@ cbind(
       "com a primeira coluna sendo a variável resposta transformada",
       "(vazão da semana seguinte)."
     ),
-    booktabs = TRUE, linesep = "", escape = TRUE, digits = 3
+    booktabs = TRUE, linesep = "", escape = FALSE, digits = 3
   ) %>%
   kable_styling(latex_options = c("striped", "hold_position"))
 ```
@@ -162,6 +160,7 @@ Os modelos que serão ajustados são:
 - Rede Neural
 
 ```{r}
+set.seed(1)
 cv_folds <- 10
 
 folds <- sample(1:10, size = length(y_treino), replace = TRUE)
@@ -172,6 +171,7 @@ Para os modelos de Lasso e Ridge, primeiro foi escolhido o melhor parâmetro de 
 
 
 ```{r}
+set.seed(1)
 lambda_lasso <-
   cv.glmnet(x_treino,
     y_treino,
@@ -354,9 +354,11 @@ onde $\hat y_{B}, \hat y_{L}, \hat y_{F}, \hat y_{R}, \hat y_{RN},$ são as pred
 
 
 ```{r}
+set.seed(549)
 lasso_full <- glmnet(x_treino, y_treino, alpha = 1, lambda = lambda_lasso)
 ridge_full <- glmnet(x_treino, y_treino, alpha = 0, lambda = lambda_ridge)
-rf_full <- randomForest(x_treino, y_treino, ntree = 500, maxnodes = 15)
+rf_full <- randomForest(x_treino, y_treino, ntree = 500, maxnodes = 15,
+                        importance = TRUE)
 xgboost_full <- xgboost(x_treino, y_treino,
   nrounds = 1000, params = params,
   verbose = 0
@@ -392,9 +394,54 @@ x_teste <- as.matrix(teste_sf[, colnames(x_treino)]) %>%
 predicoes <- expm1(mistura_predicoes(x_teste))
 
 write.csv(data.frame(y_pred = predicoes),
-          file = glue("sf_{nusp}_{meunome}.csv"))
-```
+  file = glue("sf_{nusp}_{meunome}.csv")
+)
 ```
 
+```{r}
+preds = list(
+    xgb = expm1(predict(xgboost_full, x_treino)),
+    rf = expm1(predict(rf_full, x_treino)),
+    lasso = expm1(predict(lasso_full, x_treino)),
+    ridge = expm1(predict(ridge_full, x_treino)),
+    rn = expm1(predict(rn_full, x_treino)),
+    mistura = expm1(mistura_predicoes(x_treino))
+)
 
+sapply(preds, MAE, obs = treino_sf$Y)
+```
+
+```{r importancias, fig.cap="Importância de variável", fig.subcap=c("Boosting", "Floresta Aleatória", "Lasso", "Ridge"), out.width="50%", fig.ncol=2}
+imp_xgb = xgb.importance(colnames(x_treino), xgboost_full)
+
+xgb.ggplot.importance(imp_xgb, top_n = n_var, ) +
+    labs(title = NULL, x = "Estação", y = "Importância")
+
+width = .5
+
+importance(rf_full) %>%
+    as_tibble(rownames = "termo") %>%
+    slice_max(`%IncMSE`, n=n_var) %>%
+    ggplot(aes(reorder(termo, `%IncMSE`, mean), `%IncMSE`)) +
+    geom_col(fill = "dodgerblue3", width = width) +
+    coord_flip() +
+    labs(x = "Estação", y = "Importância")
+
+# Absoluto do coeficiente para Lasso e Ridge
+varImp(lasso_full, lambda_lasso) %>%
+    rownames_to_column("termo") %>%
+    slice_max(Overall, n = n_var) %>%
+    ggplot(aes(reorder(termo, Overall, mean), Overall)) +
+    geom_col(fill = "dodgerblue3", width = width) +
+    coord_flip() +
+    labs(x = "Estação", y = "Importância")
+
+varImp(ridge_full, lambda_ridge) %>%
+    rownames_to_column("termo") %>%
+    slice_max(Overall, n = n_var) %>%
+    ggplot(aes(reorder(termo, Overall, mean), Overall)) +
+    geom_col(fill = "dodgerblue3", width = width) +
+    coord_flip() +
+    labs(x = "Estação", y = "Importância")
+```
 

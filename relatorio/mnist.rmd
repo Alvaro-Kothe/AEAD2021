@@ -282,7 +282,7 @@ input_shape <- c(dim_imagem, dim_imagem, 1)
 batch_size <- 64
 epochs <- 50
 
-val_data = list(x_val_ar, y_val_tc)
+val_data <- list(x_val_ar, y_val_tc)
 
 callbacks <- list(
   callback_early_stopping(patience = 5, restore_best_weights = TRUE)
@@ -294,13 +294,15 @@ callbacks <- list(
 
 tensorflow::set_random_seed(42)
 
-rn_base = keras_model_sequential() %>%
-    layer_conv_2d(filters = 32, kernel_size = c(5, 5), activation = "relu",
-    input_shape = input_shape) %>%
-    layer_max_pooling_2d() %>%
-    layer_flatten() %>%
-    layer_dense(512, activation = "relu") %>%
-    layer_dense(10, activation = "softmax")
+rn_base <- keras_model_sequential() %>%
+  layer_conv_2d(
+    filters = 32, kernel_size = c(5, 5), activation = "relu",
+    input_shape = input_shape
+  ) %>%
+  layer_max_pooling_2d() %>%
+  layer_flatten() %>%
+  layer_dense(512, activation = "relu") %>%
+  layer_dense(10, activation = "softmax")
 
 rn_base %>% compile(
   loss = loss_categorical_crossentropy,
@@ -314,13 +316,13 @@ rn_base %>% fit(
   epochs = epochs,
   callbacks = callbacks,
   validation_data = val_data,
-  verbose=2
+  verbose = 2
 )
 
-# rn_base %>% evaluate(x_val_ar, y_val_tc)
+rn_base %>% evaluate(x_val_ar, y_val_tc)
 
-#       loss   accuracy 
-# 0.03541163 0.98966664 
+#       loss   accuracy
+# 0.03541163 0.98966664
 ```
 
 
@@ -338,10 +340,10 @@ rn_mnist <- keras_model_sequential() %>%
     input_shape = input_shape
   ) %>%
   layer_max_pooling_2d(pool_size = c(2, 2)) %>%
-    layer_dropout(.2) %>%
+  layer_dropout(.2) %>%
   layer_conv_2d(filters = 64, kernel_size = c(5, 5), activation = "relu") %>%
   layer_max_pooling_2d(pool_size = c(2, 2)) %>%
-      layer_dropout(.2) %>%
+  layer_dropout(.2) %>%
   layer_flatten() %>%
   layer_dense(512, "relu") %>%
   layer_dropout(.2) %>%
@@ -361,14 +363,12 @@ historico <- rn_mnist %>% fit(
   epochs = epochs,
   callbacks = callbacks,
   validation_data = val_data,
-  verbose=2
+  verbose = 2
 )
 
-# rn_mnist %>% evaluate(x_val_ar, y_val_tc)
-# 
-#       loss   accuracy 
-# 0.02965022 0.99213332 
-
+# Evaluate:
+#       loss   accuracy
+# 0.02965022 0.99213332
 ```
 
 

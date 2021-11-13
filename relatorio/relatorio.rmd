@@ -5,6 +5,7 @@ output:
     bookdown::pdf_document2:
         number_sections: false
         toc: false
+        extra_dependencies: ["subfig"]
 editor_options: 
   chunk_output_type: console
 header-includes:
@@ -54,5 +55,5 @@ nusp <- "13030061"
 \pagebreak
 
 
-```{r sf, eval=FALSE, child="sf.rmd", include=FALSE}
+```{r sf, child="sf.rmd"}
 ```
