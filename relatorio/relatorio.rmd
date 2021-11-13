@@ -24,6 +24,7 @@ knitr::opts_chunk$set(
 ```{r message=FALSE, warning=FALSE}
 
 library(Matrix) # Criar SparseMatrix para os digitos
+library(corrplot)
 library(caret) # Ferramentas de ML, como imputar e padronizar.
 library(dplyr) # Manipulação de dados
 library(forcats) # Manipulação de fatores

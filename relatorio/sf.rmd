@@ -10,6 +10,35 @@ o que fazer:
 load("../dados/dados_rio_sf.rdata")
 ```
 
+Na Figura \@ref(fig:resp-lag) é apresentado o gráfico de dispersão da estação resposta contra a sua defasagem de primeira ordem.
+```{r rep-lag, fig.cap="Gráfico da resposta contra a sua defasagem."}
+ggplot(treino_sf, aes(`46998000`, Y)) +
+    geom_point() +
+    geom_smooth(method="lm", se=FALSE) +
+    labs(y = "Resposta", x = "Lag_1")
+```
+
+```{r corplot, fig.cap="Heatmap das variáveis com a maior correlação com a variável resposta."}
+
+n_var = 15
+
+corr = cor(treino_sf, use = "pairwise.complete.obs")
+# Ordena pela correlação com a variável resposta `Y`
+
+cor_srted <- order(abs(corr[, "Y"]), decreasing = TRUE)[seq_len(n_var)]
+
+corplot <- corr[cor_srted, cor_srted]
+
+corrplot.mixed(corplot, tl.pos = "lt", tl.col = "black",
+               number.cex = .6)
+```
+
+```{r eval=FALSE, include=FALSE}
+estacoes %>% filter(estacao_codigo %in% colnames(corplot)[1:6]) %>%
+    head()
+```
+Todas as bacias que apresentaram correlação acima de 0.9 pertencem ao rio são francisco.
+
 
 No conjunto de dados sobre a vazão no rio são francisco, temos `r nrow(dados_treino)` semanas de coletas de vazão e precipitação de diversas estações. O objetivo é predizer a vazão na estação 46998000 na semana seguinte.
 
