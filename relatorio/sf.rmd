@@ -24,7 +24,7 @@ O conjunto de dados possui diversas informações faltando, e comparado ao conju
 
 ### Correção de assimetria e escala
 
-É recomendado realizar transformações nas variáveis para que elas sejam normalmente distribuídas. O pacote *scikit-learn* fez um [exemplo](https://scikit-learn.org/stable/auto_examples/compose/plot_transformed_target.html#sphx-glr-auto-examples-compose-plot-transformed-target-py) para apresentar as vantagens de construir os modelos com a variável resposta transformada e em seguida realiza a transformação inversa para obter melhores predições.
+É recomendado realizar transformações nas variáveis para que elas sejam normalmente distribuídas. O pacote *scikit-learn* fez um [exemplo](https://scikit-learn.org/stable/auto_examples/compose/plot_transformed_target.html#sphx-glr-auto-examples-compose-plot-transformed-target-py) para apresentar as vantagens de construir os modelos com a variável resposta transformada e em seguida realiza a transformação inversa para obter melhores predições. Um dos principais motivos para realizar esse tipo de transformação é para que pontos discrepantes não tenham um peso tão grande no modelo.
 
 A Figura \@ref(fig:grafico-densidade-vazao) apresenta as densidades das vazões e precipitações das estações até o quantil de 90\% para melhor visualização.
 
@@ -88,7 +88,7 @@ Em seguida, para remover o efeito da escala das vazões e precipitações, essas
 # padroniza
 standardizer <- preProcess(x_trans, method = c("center", "scale"))
 x_treino <- predict(standardizer, x_trans)
-y_treino = log1p(treino_sf[,1])
+y_treino <- log1p(treino_sf[, 1])
 ```
 
 
@@ -192,11 +192,11 @@ O modelo de Boosting consegue facilmente sobreajustar os dados de treino. Porém
 set.seed(115)
 
 scores[["Lasso"]] <- cv_mae(glmnet,
-                            x_treino, y_treino,  folds,
+  x_treino, y_treino, folds,
   alpha = 1, lambda = lambda_lasso
 )
 scores[["Ridge"]] <- cv_mae(glmnet,
-                            x_treino, y_treino,  folds,
+  x_treino, y_treino, folds,
   alpha = 0, lambda = lambda_ridge
 )
 
@@ -219,7 +219,7 @@ params <- list(
 )
 
 scores[["Boosting"]] <- cv_mae(xgboost,
-                               x_treino, y_treino, folds,
+  x_treino, y_treino, folds,
   nrounds = 1000, params = params, verbose = 0
 )
 ```
@@ -264,6 +264,10 @@ scores[["Rede Neural"]] <- sapply(unique(folds), function(fold) {
     MAE(y_val)
 })
 ```
+
+
+*comparar as estruturas das redes antigas, comparação relu e sigmoide e rede com 2 camadas escondidas ou com 1*
+
 
 ### Comparação dos modelos
 
@@ -329,34 +333,37 @@ xgboost_full <- xgboost(x_treino, y_treino,
   verbose = 0
 )
 
-rn_full = cria_rede_sf()
-rn_full %>% fit(x_treino, y_treino, verbose = 0, 
-                batch_size = 64, epochs = 50)
+rn_full <- cria_rede_sf()
+rn_full %>% fit(x_treino, y_treino,
+  verbose = 0,
+  batch_size = 64, epochs = 50
+)
 
 
 mistura_predicoes <- function(x) {
- predicao =  .25 * predict(xgboost_full, x) +
+  predicao <- .25 * predict(xgboost_full, x) +
     .25 * predict(lasso_full, x) +
     .25 * predict(rf_full, x) +
     .2 * predict(ridge_full, x) +
-        .05 * predict(rn_full, x) 
- 
- # Evita que a predicao saia como matriz ou dataframe por causa do lasso
- if (is.matrix(predicao) || is.data.frame(predicao)) {
- return(as.vector(predicao))
- }
- predicao
+    .05 * predict(rn_full, x)
+
+  # Evita que a predicao saia como matriz ou dataframe por causa do lasso
+  if (is.matrix(predicao) || is.data.frame(predicao)) {
+    return(as.vector(predicao))
+  }
+  predicao
 }
 ```
 
 ```{r}
-x_teste = as.matrix(teste_sf[, colnames(x_treino)]) %>%
-    log1p() %>% # Realiza a transformação log(x+1)
-    predict(standardizer, .) # Padroniza
+x_teste <- as.matrix(teste_sf[, colnames(x_treino)]) %>%
+  log1p() %>% # Realiza a transformação log(x+1)
+  predict(standardizer, .) # Padroniza
 
-predicoes = expm1(mistura_predicoes(x_teste))
+predicoes <- expm1(mistura_predicoes(x_teste))
 
-write.csv(data.frame(y_pred = predicoes), file = glue("sf_{nusp}_{meunome}.csv"))
+write.csv(data.frame(y_pred = predicoes),
+          file = glue("sf_{nusp}_{meunome}.csv"))
 ```
 ```
 

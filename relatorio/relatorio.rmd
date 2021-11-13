@@ -47,11 +47,11 @@ nusp <- "13030061"
 ```
 
 
-```{r mnist, eval=FALSE, child="mnist.rmd", include=FALSE}
+```{r mnist, child="mnist.rmd"}
 ```
 
 \pagebreak
 
 
-```{r sf, child="sf.rmd"}
+```{r sf, eval=FALSE, child="sf.rmd", include=FALSE}
 ```
