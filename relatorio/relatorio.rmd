@@ -10,6 +10,7 @@ editor_options:
   chunk_output_type: console
 header-includes:
    - \usepackage[brazil]{babel}
+indent: true
 urlcolor: blue
 ---
 
@@ -25,8 +26,8 @@ knitr::opts_chunk$set(
 ```{r message=FALSE, warning=FALSE}
 
 library(Matrix) # Criar SparseMatrix para os digitos
-library(corrplot)
 library(caret) # Ferramentas de ML, como imputar e padronizar.
+library(corrplot) # Gráfico de correlação
 library(dplyr) # Manipulação de dados
 library(forcats) # Manipulação de fatores
 library(ggplot2) # Gráficos
@@ -38,7 +39,7 @@ library(knitr) # ferramentas para geracao de relatorios em markdown
 library(randomForest) # Ajuste de modelos de floresta aleatória
 library(tibble) # Tabelas mais flexíveis
 library(tidyr) # Manipulação de dados
-library(xgboost) # Ajuste de modelos de bagging
+library(xgboost) # Ajuste de modelos de boosting
 options(keras.view_metrics = FALSE)
 theme_set(theme_light())
 ```
@@ -52,7 +53,7 @@ nusp <- "13030061"
 ```{r mnist, child="mnist.rmd"}
 ```
 
-\pagebreak
+\clearpage
 
 
 ```{r sf, child="sf.rmd"}

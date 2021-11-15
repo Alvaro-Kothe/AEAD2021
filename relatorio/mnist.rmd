@@ -19,9 +19,9 @@ idx_val <- sample(seq_len(n), n * perc_val)
 idx_tr <- setdiff(seq_len(n), idx_val)
 ```
 
-No conjunto de dados de dígitos manuscritos, temos 60000 dígitos escritos a mão em imagens de dimensão $28 \times 28$. O conjunto de dados foi separado em conjunto de treino e validação, onde `r perc_val * 100`\% dos dados foi utilizado como conjunto de validação, ou seja, uma amostra de `r length(idx_tr)` dígitos será utilizada para construir os modelos, e os dígitos restantes serão utilizados para avaliar a qualidade de ajuste dos modelos.
+O conjunto de dados de dígitos manuscritos possui 60000 dígitos escritos a mão em imagens de dimensão $28 \times 28$. O conjunto de dados foi separado em conjunto de treino e validação, onde `r perc_val * 100`\% dos dados foi utilizado como conjunto de validação, ou seja, uma amostra de `r length(idx_tr)` dígitos será utilizada para construir os modelos, e os dígitos restantes serão utilizados para avaliar a qualidade de ajuste dos modelos.
 
-Em seguida os pixels foram normalizados para a escala $[0, 1],$ (equivalente a por a imagem na escala de cinza) para que alguns dos modelos utilizados convirja mais rápido. 
+Em seguida os pixels foram normalizados para a escala $[0, 1],$ (equivalente a por a imagem na escala de cinza) para que alguns dos modelos utilizados convirjam mais rápido. 
 
 ```{r}
 # Como as matrizes das imagens possuem muito zero, uma matriz esparsa é
@@ -39,7 +39,7 @@ Com os dados normalizados e separados em conjunto de treino e teste, serão cons
 
 ### Modelo linear com regularização
 
-Como o problema é diferenciar 10 dígitos utilizando 784 pixels, isso indica que o problema é de classificação com mais de duas classes. Logo, será ajustado um modelo multinomial. E como diversos pixels geralmente não são preenchidos para escrever os dígitos, é interessante realizar selecionar os pixels importantes para a classificação de cada dígito. Por isso, será ajustado um modelo Lasso Multinomial. Para a escolha do parâmetro de penalização foi gerado 100 hiper-parâmetros de penalização, e foi escolhido o melhor hiper-parâmetro através de validação cruzada utilizando apenas o conjunto de treino.
+Como o problema é diferenciar 10 dígitos utilizando 784 pixels, isso indica que o problema é de classificação com mais de duas classes. Logo, será ajustado um modelo multinomial. E como diversos pixels não são preenchidos para escrever os dígitos, é interessante selecionar os pixels importantes para a classificação de cada dígito. Por isso, será ajustado um modelo Lasso Multinomial. Para a escolha do parâmetro de penalização, foi gerado 100 hiper-parâmetros de penalização, e foi escolhido o melhor hiper-parâmetro através de validação cruzada utilizando apenas o conjunto de treino.
 
 
 
@@ -136,7 +136,7 @@ Pela Figura \@ref(fig:pixels-importantes-lasso), é possível ver os principais 
 
 ### Modelo baseado em árvore
 
-Existe vários tipos possíveis de modelos baseados em árvore que podem ser utilizados. Porém, para casos de classificação de imagem, mais especificamente a classificação de dígitos do MNIST, modelos de *boosting* conseguem oferecer um bom ajuste. Por conta disso, será ajustado um modelo de boosting utilizando o pacote [XGBoost](https://xgboost.ai/).
+Existem vários tipos possíveis de modelos baseados em árvore que podem ser utilizados. Para esse problema de classificação de imagem, será escolhido o modelo de *boosting*. O pacote utilizado para ajustar o modelo é o [XGBoost](https://xgboost.ai/).
 
 
 ```{r}
@@ -198,13 +198,13 @@ accuracias <- xgb_search(dtrain,
 # acuracias variaram de 0,78 ate 0,97
 ```
 
-Para a seleção dos hiper-parâmetros, foi ajustado 75 modelos para selecionar a taxa de aprendizagem (`eta`), a profundidade máxima da árvore (`max_depth`) e a perda mínima para criar outra partição da árvore (`min_child_weight`). Os parâmetros escolhidos foram:
+Para a seleção dos hiper-parâmetros, mantendo o número de árvores fixo em 100, foi ajustado 75 modelos para selecionar a taxa de aprendizagem (`eta`), a profundidade máxima da árvore (`max_depth`) e o peso mínimo para criar outra partição da árvore (`min_child_weight`). Os parâmetros escolhidos foram:
 
 - eta: 0.1
 - max_depth: 6
 - min_child_weight: 4
 
-O número de árvores foi controlado pelo conjunto de validação, porém foi definido que o número máximo de árvores seria 500.
+Em seguida, foi selecionado o número de árvores a partir do conjunto de validação.
 
 ```{r xgboost mnist, cache=TRUE, include=FALSE}
 
@@ -326,7 +326,7 @@ rn_base %>% evaluate(x_val_ar, y_val_tc)
 ```
 
 
-Para o modelo de rede neural, foi considerado uma rede neural convolucional base com acurácia 0.9897. Para a rede base, foi utilizada uma camada convolucional e uma camada escondida, todas camadas tiveram função de ativação `relu`. O otimizador utilizado foi o `Adam` com taxa de aprendizagem 0,0001.
+Para o modelo de rede neural, foi considerado uma rede neural convolucional base com acurácia 0.9897. Para a rede base, foi utilizada uma camada convolucional e uma camada escondida. Todas camadas tiveram função de ativação `relu`. O otimizador utilizado foi o `Adam` com taxa de aprendizagem 0,0001.
 
 
 ```{r cnn-final}
@@ -372,7 +372,7 @@ historico <- rn_mnist %>% fit(
 ```
 
 
-Em seguida foi ajustado diversas redes, manipulando a quantidade de camadas intermediárias, adicionando camada de `dropout` e manipulando o otimizador ([Ruder](https://ruder.io/optimizing-gradient-descent/) apresentou diversos otimizadores baseados em gradiente descendente). A estrutura da rede final é:
+Em seguida foi ajustado diversas redes, manipulando a quantidade de camadas intermediárias, adicionando camada de `dropout` e manipulando o otimizador (Ruder apresentou em um [blog](https://ruder.io/optimizing-gradient-descent/) diversos otimizadores baseados em gradiente descendente). A estrutura da rede final é:
 
 - camada convolucional com 32 filtros, janela deslizante $5 \times 5$ e ativação relu;
 - camada de `max_pooling` de dimensão $2 \times 2$;
@@ -388,7 +388,7 @@ Em seguida foi ajustado diversas redes, manipulando a quantidade de camadas inte
 O otimizador escolhido foi o `nadam` que é similar ao `adam` mas contém momento para acelerar a convergência. Foi definido que o ajuste seria parado se houvesse 5 épocas sem melhora, e o modelo foi ajustado em lotes de tamanho `r batch_size`.
 
 
-```{r pred-rede, cache=TRUE}
+```{r pred-rede}
 
 pred_mnist_rn_val <- predict(rn_mnist, x_val_ar) %>%
   k_argmax() %>%

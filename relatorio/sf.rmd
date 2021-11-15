@@ -5,13 +5,24 @@
 load("../dados/dados_rio_sf.rdata")
 ```
 
+
+
+
+No conjunto de dados sobre a vazão no rio são francisco, tem `r nrow(treino_sf)` semanas de coletas de vazão e precipitação de diversas estações. O objetivo é predizer a vazão na estação 46998000 na semana seguinte.
+
+Comparado ao conjunto de dados de dígitos MNIST, o conjunto de dados não possui muitas observações. Por isso, para a estimação do erro será utilizada a validação cruzada.
+
+### Relação da variável resposta com os preditores.
+
 Na Figura \@ref(fig:resp-lag) é apresentado o gráfico de dispersão da estação resposta contra a sua defasagem de primeira ordem.
 ```{r resp-lag, fig.cap="Gráfico da resposta contra a sua defasagem."}
 ggplot(treino_sf, aes(`46998000`, Y)) +
   geom_point() +
   geom_smooth(method = "lm", se = FALSE) +
-  labs(y = "Resposta", x = "Lag_1")
+  labs(y = "Resposta", x = "Defasagem de primeira ordem")
 ```
+
+Pela Figura \@ref(fig:resp-lag), nota-se que existe uma forte relação linear entre a resposta e a sua defasagem.
 
 ```{r corplot, fig.cap="Heatmap das variáveis com a maior correlação com a variável resposta."}
 
@@ -35,28 +46,16 @@ estacoes %>%
   filter(estacao_codigo %in% colnames(corplot)[1:6]) %>%
   head()
 ```
-Todas as bacias que apresentaram correlação acima de 0.9 com a variável resposta `Y`, pertencem ao rio são francisco.
-
-
-No conjunto de dados sobre a vazão no rio são francisco, temos `r nrow(treino_sf)` semanas de coletas de vazão e precipitação de diversas estações. O objetivo é predizer a vazão na estação 46998000 na semana seguinte.
-
-O conjunto de dados possui diversas informações faltando, e comparado ao conjunto de dados de dígitos MNIST, não possui muitas observações. Por isso, para o tratamento e seleção de modelos será considerado a seguinte abordagem:
-
-- Imputação: Será utilizado todo conjunto de treino disponibilizado;
-- Tratamento
-- Seleção de modelo: Será utilizado validação cruzada para comparar os modelos considerando o erro absoluto médio;
-- Embedding
-
-
+Todas as bacias que apresentaram correlação acima de 0.9 com a variável resposta `Y`, pertencem ao rio são francisco. Também nota-se que existe uma correlação alta e positiva entre essas bacias.
 
 ### Correção de assimetria e escala
 
 É recomendado realizar transformações nas variáveis para que elas sejam normalmente distribuídas. O pacote *scikit-learn* fez um [exemplo](https://scikit-learn.org/stable/auto_examples/compose/plot_transformed_target.html#sphx-glr-auto-examples-compose-plot-transformed-target-py) para apresentar as vantagens de construir os modelos com a variável resposta transformada e em seguida realiza a transformação inversa para obter melhores predições. Um dos principais motivos para realizar esse tipo de transformação é para que pontos discrepantes não tenham um peso tão grande no modelo.
 
-A Figura \@ref(fig:grafico-densidade-vazao) apresenta as densidades das vazões e precipitações das estações até o quantil de 90\% para melhor visualização.
+A Figura \@ref(fig:grafico-densidade-vazao)a apresenta as densidades das vazões e precipitações das estações até o quantil de 90\% de todas as estações. A Figura  \@ref(fig:grafico-densidade-vazao)b apresenta a densidade da variável resposta.
 
 
-```{r grafico-densidade-vazao, fig.cap="Gráfico de densidades das estações, utilizando até o quantil 90\\% de todas as vazões."}
+```{r grafico-densidade-vazao, fig.cap="Gráfico de densidades das estações.", fig.subcap=c("Todas as estações até o quantil 90\\%", "Variável resposta"), out.width="50%"}
 # retira vazões muito altas para melhorar a visibilidade do gráfico
 dados_vazoes_longo <- treino_sf %>%
   pivot_longer(
@@ -71,12 +70,7 @@ dados_vazoes_longo %>%
   ggplot(aes(vazao, color = estacao, fill = estacao)) +
   geom_density(show.legend = FALSE, alpha = .3) +
   labs(x = "Vazão", y = "Densidade")
-```
 
-
-Na Figura \@ref(fig:densidade-resp) é apresentado a densidade da variável que deseja-se estimar.
-
-```{r densidade-resp, fig.cap="Gráfico de densidade da estação resposta"}
 ggplot(treino_sf, aes(Y)) +
   geom_density() +
   labs(
@@ -85,12 +79,13 @@ ggplot(treino_sf, aes(Y)) +
   )
 ```
 
-Pelas Figuras \@ref(fig:grafico-densidade-vazao) e \@ref(fig:densidade-resp), nota-se as vazões são bastante assimétricas. Por isso, será aplicado a transformação $\log(x + 1)$ em todas as vazões e precipitações para reduzir a assimetria. Na figura \@ref(fig:densidades-transformadas) são apresentadas todas as vazões e precipitações transformadas das estações preditoras e a vazão da variável resposta.
+
+Pelas Figuras \@ref(fig:grafico-densidade-vazao)a e \@ref(fig:grafico-densidade-vazao)b, nota-se que as vazões são bastante assimétricas. Por isso, será aplicado a transformação $\log(x + 1)$ em todas as vazões e precipitações para reduzir a assimetria, incluindo a variável resposta. Na Figura \@ref(fig:densidades-transformadas) são apresentadas todas as vazões e precipitações transformadas das estações preditoras e a vazão da variável resposta.
 
 ```{r densidades-transformadas, fig.cap="Gráfico de densidade das variáveis transformadas.", fig.subcap=c("Todas as estações", "Variável resposta"), out.width="50%"}
 
 dados_vazoes_longo %>%
-  ggplot(aes(log1p(vazao), color = estacao, fill = estacao)) +
+  ggplot(aes(log1p(vazao), color = estacao)) +
   geom_density(show.legend = FALSE, alpha = .3) +
   labs(x = "Vazão", y = "Densidade")
 
@@ -101,7 +96,7 @@ ggplot(treino_sf, aes(log1p(Y))) +
     y = "Densidade"
   )
 ```
-Nota-se pela \@ref(fig:densidades-transformadas), que a transformação $\log(x+1)$ conseguiu reduzir bastante a assimetria.
+Nota-se pela Figura \@ref(fig:densidades-transformadas), que a transformação $\log(x+1)$ conseguiu reduzir bastante a assimetria das vazões e precipitações.
 
 ```{r}
 # Transforma
@@ -122,7 +117,7 @@ y_treino <- log1p(treino_sf[, 1])
 
 
 
-Para a predição da estação 46998000, será utilizado apenas os dados das vazões da semana anterior, incluindo a vazão da própria estação 46998000. Além disso, mesmo que os dados estejam padronizados, a vazão da semana seguinte será predita com a transformação $\log(x+1)$. Para conjunto de teste será aplicado a transformação $\exp(x) - 1$ nas predições para que a vazão seja apresentada na escala original.
+Para a predição da estação 46998000, será utilizado apenas os dados das vazões da semana anterior, incluindo a vazão da própria estação 46998000. Além disso, mesmo que os dados estejam padronizados, a vazão da semana seguinte será predita com a transformação $\log(x+1)$. Para conjunto de teste será aplicado a transformação $\exp(x) - 1$ nas predições para que a vazão esteja na escala original.
 
 Para ilustrar as transformações feitas, e o que será utilizado para ajustar os modelos, na Tabela \@ref(tab:matriz-x) é apresentado as 6 primeiras observações do conjunto de treinamento, em que na primeira coluna tem-se a vazão da semana seguinte que deseja-se prever com a transformação $\log(x+1)$.  As demais colunas são as 6 primeiras colunas das vazões da semana anterior já transformadas e padronizadas.
 
@@ -147,9 +142,9 @@ cbind(
 
 ### Ajuste dos modelos
 
-Como já definido, os modelos serão comparados por validação cruzada. O método de validação cruzada escolhido foi o *k-folds*, com $k=10$, ou seja, será utilizado 9 amostras para ajustar os modelos, e uma amostra para validação. Esse processo será repetido 10 vezes. A medida utilizada para comparar os modelos será o erro médio absoluto.
+Como já definido, os modelos serão comparados por validação cruzada. O método de validação cruzada escolhido foi o *k-folds*, com $k=10$, ou seja, será utilizado 9 amostras para ajustar os modelos, e uma amostra para validação. Esse processo será repetido para cada amostra (*fold*). A medida utilizada para comparar os modelos será o erro médio absoluto na variável resposta transformada (com a transformação $\log (x + 1)$). Não é necessário comparar com a resposta na escala original pois a transformação logarítmica é uma transformação monótona.
 
-Os modelos que serão ajustados são:
+Os modelos ajustados serão:
 
 - Modelos lineares com regularização:
     - Lasso
@@ -210,10 +205,111 @@ cv_mae <- function(modelo, x, y, folds, ...) {
 }
 ```
 
+```{r tuning, eval=FALSE, include=FALSE}
+# Seleção de hiperparâmetros
+## RandomForest
+### Pelo Caret, o parâmetro mtry é o principal parametro a ser selecionado
 
-Maior parte do modelo de floresta aleatória foi ajustado com os valores padrão da função `randomForest` do pacote com o mesmo nome. Mas para previnir sobreajuste foi definido que a profundidade máxima de cada árvore seria 15.
+# Seleciona 10 hiperparametros aleatóriamente
+mtry <- sample(seq_len(ncol(x_treino)), 10)
 
-O modelo de Boosting consegue facilmente sobreajustar os dados de treino. Porém, o pacote XGBoost fornece diversos hiper-parâmetros para controlar o ajuste. Por isso foi utilizada uma taxa de aprendizagem $\eta = 0.01$,  profundidade máxima da árvore 4, em cada árvore utilizava apenas 70\% das observações e dos preditores. Além disso, a perda mínima para a prolongar a árvore seria 0.6, foi utilizada regularização de primeira ordem e foi utilizado o número de árvores igual a 1000.
+# Validação cruzada com 50 árvores
+mtry_cv <- purrr::map_dbl(
+  mtry,
+  ~ mean(
+    cv_mae(randomForest, x_treino, y_treino, folds, mtry = .x, ntree = 50)
+  )
+)
+
+# pega o melhor parâmetro
+mtry_50 <- mtry[which.min(mtry_cv)]
+# [1] 54
+
+# Procura em 3 valores atrás e 3 valores a frente
+mtry_100t <- seq(max(mtry_50 - 3, 0), min(mtry_50 + 3, ncol(x_treino)))
+
+# validação cruzada com 100 árvores
+mtry_cv100 <- purrr::map_dbl(
+  mtry_100t,
+  ~ mean(
+    cv_mae(randomForest, x_treino, y_treino, folds,
+      mtry = .x, ntree = 100
+    )
+  )
+)
+
+### Escolha do mtry
+mtry_100t[which.min(mtry_cv100)]
+# [1] 54
+
+
+
+## XGBOOST
+
+## Escolha dos parametros de arvore e linear
+
+xgb_grid <- expand_grid(
+  objective = "reg:squarederror",
+  eta = c(.1, .05, .01),
+  max_depth = 4:6,
+  gamma = c(0, .1, .6),
+  subsample = c(.7, 1),
+  colsample_bytree = c(.7, 1),
+  reg_alpha = c(0, 5e-5),
+  nthread = parallel::detectCores() - 1
+) %>%
+  split(seq_len(nrow(.))) %>%
+  lapply(as.list)
+
+cv_mae_xgb <- purrr::map_dbl(xgb_grid, ~ mean(
+  cv_mae(xgboost, x_treino, y_treino, folds,
+    params = .x, nrounds = 100, verbose = 0
+  )
+))
+
+best_params <- xgb_grid[[which.min(cv_mae_xgb)]]
+
+dput(best_params)
+
+# list(objective = "reg:squarederror", eta = 0.1, max_depth = 6L,
+#     gamma = 0, subsample = 1, colsample_bytree = 1, reg_alpha = 0,
+#     nthread = 11)
+
+## Escolha do número de árvores
+
+nrounds_cands <- c(100, 500, 1000)
+
+cv_mae_xgb_nr <- purrr::map_dbl(nrounds_cands, ~ mean(
+  cv_mae(xgboost, x_treino, y_treino, folds,
+    params = best_params, nrounds = .x, verbose = 0
+  )
+))
+
+best_nrounds <- nrounds_cands[which.min(cv_mae_xgb_nr)]
+
+
+print(best_nrounds)
+
+# [1] 500
+```
+
+
+O modelo de floresta aleatória foi ajustado com a função `randomForest` do pacote com o mesmo nome.
+
+De acorto com o pacote `caret`, o principal hiper-parâmetro de floresta aleatória a ser otimizado é o número de variáveis amostradas em cada divisão da árvore (`mtry`). Para isso, foi escolhido aleatóriamente 10 valores para esse hiper-parâmetro, e foram comparados por validação cruzada fixando o número de árvores em 50. O parâmetro escolhido da amostra de 10 foi testado novamente, só que dessa vez comparado com 3 valores na frente e atrás, fixando o número de árvores em 100. O hiper-parâmetro `mtry` escolhido foi 54.
+
+Após a seleção do hiper-parâmetro `mtry`, o modelo foi ajustado utilizando 500 árvores, que é o padrão do pacote `randomForest`.
+
+Para a seleção dos hiper-parâmetros do modelo de boosting, manteve-se o número de árvores fixo em 100, foi ajustado 216 modelos para selecionar a taxa de aprendizagem (`eta`), a profundidade máxima da árvore (`max_depth`), a perda mínima para criar outra partição da árvore (`gamma`), amostragem de observações e variáveis (`subsample` e `colsample_bytree`, respectivamente) e regularização L1 (`alpha`). Os parâmetros que tiveram o menor erro médio absoluto pela validação cruzada foram:
+
+- eta: 0.1
+- max_depth: 6
+- gamma: 0
+- subsample: 1
+- colsample_bytree: 1
+- reg_alpha: 0
+
+Maior parte dos hiper-parâmetros selecionados são o padrão da função `xgboost`. Em seguida, foi selecionado o número de árvores `ntrees`, também pela validação cruzada. O valor escolhido foi 500.
 
 
 ```{r scores, cache=TRUE}
@@ -231,39 +327,44 @@ scores[["Ridge"]] <- cv_mae(glmnet,
 
 scores[["Floresta Aleatória"]] <- cv_mae(randomForest,
   x_treino, y_treino, folds,
-  maxnodes = 15
+  mtry = 54
 )
 
 
+# Maior parte dos hiper-parâmetros selecionados é o padrão
 params <- list(
   objective = "reg:squarederror",
-  eta = .01, # taxa de aprendizagem baixa para evitar overfitting.
-  max_depth = 4, # A profundidade máxima da árvore
-  gamma = .6, # Perda mínima para uma nova partição  da folha.
-  subsample = .7, # Utiliza menos dados para ajustar o modelo
-  colsample_bytree = .7, # Utiliza menos colunas
-  reg_alpha = 5e-5, # Regularização L1, similar ao lasso
+  eta = .1, # taxa de aprendizagem
+  max_depth = 6, # A profundidade máxima da árvore
   nthread = parallel::detectCores() - 1 # número de processadores lógicos
   # utilizados.
 )
 
 scores[["Boosting"]] <- cv_mae(xgboost,
   x_treino, y_treino, folds,
-  nrounds = 1000, params = params, verbose = 0
+  nrounds = 500, params = params, verbose = 0
 )
 ```
 
-Para o modelo de redes neurais, utilizou-se um modelo simples que foi é treinado em 50 épocas em lotes de tamanho 64 (`batch_size`). A estrutura do modelo é:
+A estrutura do modelo de redes neurais foi definida a partir da tentativa e erro, utilizando validação cruzada. onde primeiramente foi definido que a primeira camada teria 128 neurônios, e as seguintes teriam a metade da camada anterior. Além disso, foi definido que todas as camadas teriam ativação sigmóide, o otimizador utilizado foi o `adam`. O modelo foi treinado em 100 épocas em lotes de tamanho 64. Com isso, encontrou que o número ótimo de camadas escondidas seria 4. Em seguida foi escolhida a ativação de cada camada.
+
+Depois de definido a estrutura da rede, foi escolhido a quantidade de épocas para treino, em que foi escolhido 200 épocas. A estrutura final da rede é
+
 
 - camada `dense` com 128 neurônios e ativação sigmóide;
 - camada `dense` com 64 neurônios e ativação sigmóide;
-- a última camada é uma `dense` com ativação linear;
+- camada `dense` com 32 neurônios e ativação relu;
+- camada `dense` com 16 neurônios e ativação relu;
+- a camada de saída é uma `dense` com ativação linear;
 
 ```{r rede-neural}
+# Altera a estrutura geral da rede e verifica os erros de validação cruzada.
 cria_rede_sf <- function() {
   modelo <- keras_model_sequential() %>%
     layer_dense(128, activation = "sigmoid", input_shape = ncol(x_treino)) %>%
     layer_dense(64, activation = "sigmoid") %>%
+    layer_dense(32, activation = "relu") %>%
+    layer_dense(16, activation = "relu") %>%
     layer_dense(1)
 
   modelo %>%
@@ -286,7 +387,7 @@ scores[["Rede Neural"]] <- sapply(unique(folds), function(fold) {
 
   modelo <- cria_rede_sf()
 
-  modelo %>% fit(x_tr, y_tr, verbose = 0, batch_size = 64, epochs = 50)
+  modelo %>% fit(x_tr, y_tr, verbose = 0, batch_size = 64, epochs = 200)
 
   modelo %>%
     predict(x_val) %>%
@@ -295,14 +396,11 @@ scores[["Rede Neural"]] <- sapply(unique(folds), function(fold) {
 ```
 
 
-*comparar as estruturas das redes antigas, comparação relu e sigmoide e rede com 2 camadas escondidas ou com 1*
-
-
 ### Comparação dos modelos
 
-Com a validação cruzada foi obtido diversos erros quadráticos médios para os modelos ajustados. Na Figura \@ref(fig:boxplot-scores) essas medidas são apresentadas em um boxplot, com a média sendo apresentada em um ponto em vermelho. E na Tabela \@ref(tab:media-scores) é apresentado a média e o desvio padrão estimados para cada modelo.
+Selecionado os hiper-parâmetros de cada modelo, eles serão comparados pela validação cruzada. Na Figura \@ref(fig:boxplot-scores) os erros médios absolutos estimados são apresentados em um boxplot, com a média como um ponto em vermelho. Na Tabela \@ref(tab:media-scores) é apresentado a média e o desvio padrão estimados para cada modelo.
 
-```{r boxplot-scores, fig.cap="Boxplot do erro médio absoluto por modelo pela validação cruzada."}
+```{r boxplot-scores, fig.cap="Boxplot do erro médio absoluto estimado por modelo pela validação cruzada."}
 scores_tbl <- bind_cols(scores) %>%
   pivot_longer(everything(), names_to = "Modelo", values_to = "mae")
 scores_tbl %>%
@@ -317,39 +415,40 @@ scores_tbl %>%
 ```
 
 ```{r media-scores}
-scores_tbl %>%
+perf_modelo <- scores_tbl %>%
   group_by(Modelo) %>%
   summarise(
     media = mean(mae),
     desvio = sd(mae)
   ) %>%
-  arrange(media) %>%
-  kable(
-    caption = paste(
-      "Média e desvio do erro médio absoluto",
-      "dos modelos pela validação cruzada"
-    ),
-    col.names = c("Modelo", "Média", "Desvio"),
-    booktabs = TRUE, linesep = ""
-  ) %>%
+  arrange(media)
+
+kable(perf_modelo,
+  caption = paste(
+    "Média e desvio do erro médio absoluto estimado",
+    "dos modelos pela validação cruzada"
+  ),
+  col.names = c("Modelo", "Média", "Erro padrão"),
+  booktabs = TRUE, linesep = ""
+) %>%
   kable_styling(latex_options = c("striped", "hold_position"))
 ```
 
-Nota-se que dos modelos ajustados, o modelo de redes neurais foi o que teve o pior ajuste e a maior variabilidade pela validação cruzada. Os modelos baseados em árvore foram os que apresentaram os erros mais consistentes pela validação cruzada, e os que apresentaram o melhor ajuste no geral foram o modelo de Boosting e o Lasso.
+Todos os modelos apresentaram erros estimados pela validação cruzada próximos, mas os modelos baseados em árvore foram os que apresentaram os menores erros.
 
 
 
 ### Escolha do modelo
 
-Geralmente para ter melhores predições, as predições dos vários modelos de *machine learning* são misturadas. Existem diversas formas de misturar as predições, desde tomar a média delas, até construir modelos sobre essas predições.
+Geralmente para ter melhores predições, as predições dos vários modelos de *machine learning* são misturadas. Uma das principais vantagens de misturar as predições é que evita o sobreajuste, e as predições são muito mais robustas. Existem diversas formas de misturar as predições, desde tomar a média delas, até construir modelos sobre essas predições.
 
 
-Todos os modelos foram ajustados novamente utilizando todo o conjuto de treino. E para as predições finais, será utilizada a média ponderada de todos os modelos ajustados, em que os pesos serão definidos a partir da performance pela validação.
+Todos os modelos foram ajustados novamente utilizando todo o conjuto de treino. E para as predições finais, será utilizada a média ponderada de todos os modelos ajustados, em que os pesos serão definidos a partir da performance dos modelos apresentadas na Figura \@ref(fig:boxplot-scores) e Tabela \@ref(tab:media-scores).
 
 Após tomar a média ponderada será utilizada a transformação $\exp(x) - 1$ na média ponderada para que a vazão predita esteja na escala original da variável resposta. Logo, as predições no conjunto de teste são dadas por:
-\[\hat y = \exp\{0.25 \hat y_{B} + 0.25 \hat y_{L} +
-0.25 \hat y_{F} + 0.2 \hat y_{R} + 0.05 \hat y_{RN}\} - 1,\]
-onde $\hat y_{B}, \hat y_{L}, \hat y_{F}, \hat y_{R}, \hat y_{RN},$ são as predições de Boosting, Lasso, Floresta aleatória, Ridge e Rede Neural, respectivamente.
+\[\hat y = \exp\{0.240 \hat y_{F}  + 0.235 \hat y_{B} +
+0.189 \hat y_{RN} + 0.182 \hat y_{L} + 0.154 \hat y_{R} \} - 1,\]
+onde $\hat y_{F}, \hat y_{B}, \hat y_{RN}, \hat y_{L}, \hat y_{R}$ são as predições de Floresta aleatória, Boosting, Rede Neural, Lasso e Ridge, respectivamente.
 
 
 
@@ -357,28 +456,30 @@ onde $\hat y_{B}, \hat y_{L}, \hat y_{F}, \hat y_{R}, \hat y_{RN},$ são as pred
 set.seed(549)
 lasso_full <- glmnet(x_treino, y_treino, alpha = 1, lambda = lambda_lasso)
 ridge_full <- glmnet(x_treino, y_treino, alpha = 0, lambda = lambda_ridge)
-rf_full <- randomForest(x_treino, y_treino, ntree = 500, maxnodes = 15,
-                        importance = TRUE)
+rf_full <- randomForest(x_treino, y_treino,
+  mtry = 54, importance = TRUE
+)
 xgboost_full <- xgboost(x_treino, y_treino,
-  nrounds = 1000, params = params,
+  nrounds = 500, params = params,
   verbose = 0
 )
 
 rn_full <- cria_rede_sf()
 rn_full %>% fit(x_treino, y_treino,
   verbose = 0,
-  batch_size = 64, epochs = 50
+  batch_size = 64, epochs = 200
 )
 
 
 mistura_predicoes <- function(x) {
-  predicao <- .25 * predict(xgboost_full, x) +
-    .25 * predict(lasso_full, x) +
-    .25 * predict(rf_full, x) +
-    .2 * predict(ridge_full, x) +
-    .05 * predict(rn_full, x)
+  predicao <-
+    .240 * predict(rf_full, x) +
+    .235 * predict(xgboost_full, x) +
+    .189 * predict(rn_full, x) +
+    .182 * predict(lasso_full, x) +
+    .154 * predict(ridge_full, x)
 
-  # Evita que a predicao saia como matriz ou dataframe por causa do lasso
+  # Evita que a predicao saia como matriz ou dataframe por causa do glmnet
   if (is.matrix(predicao) || is.data.frame(predicao)) {
     return(as.vector(predicao))
   }
@@ -398,50 +499,40 @@ write.csv(data.frame(y_pred = predicoes),
 )
 ```
 
-```{r}
-preds = list(
-    xgb = expm1(predict(xgboost_full, x_treino)),
-    rf = expm1(predict(rf_full, x_treino)),
-    lasso = expm1(predict(lasso_full, x_treino)),
-    ridge = expm1(predict(ridge_full, x_treino)),
-    rn = expm1(predict(rn_full, x_treino)),
-    mistura = expm1(mistura_predicoes(x_treino))
-)
-
-sapply(preds, MAE, obs = treino_sf$Y)
-```
+A Figura \@ref(fig:importancias) apresenta a importância de cada preditor para os modelos de Boosting, Floresta Aleatória, Lasso e Ridge. A importância dos modelos de Lasso e Ridge é basicamente o valor absoluto do coeficinete.
 
 ```{r importancias, fig.cap="Importância de variável", fig.subcap=c("Boosting", "Floresta Aleatória", "Lasso", "Ridge"), out.width="50%", fig.ncol=2}
-imp_xgb = xgb.importance(colnames(x_treino), xgboost_full)
+imp_xgb <- xgb.importance(colnames(x_treino), xgboost_full)
 
 xgb.ggplot.importance(imp_xgb, top_n = n_var, ) +
-    labs(title = NULL, x = "Estação", y = "Importância")
+  labs(title = NULL, x = "Estação", y = "Importância")
 
-width = .5
+width <- .5
 
 importance(rf_full) %>%
-    as_tibble(rownames = "termo") %>%
-    slice_max(`%IncMSE`, n=n_var) %>%
-    ggplot(aes(reorder(termo, `%IncMSE`, mean), `%IncMSE`)) +
-    geom_col(fill = "dodgerblue3", width = width) +
-    coord_flip() +
-    labs(x = "Estação", y = "Importância")
+  as_tibble(rownames = "termo") %>%
+  slice_max(`%IncMSE`, n = n_var) %>%
+  ggplot(aes(reorder(termo, `%IncMSE`, mean), `%IncMSE`)) +
+  geom_col(fill = "dodgerblue3", width = width) +
+  coord_flip() +
+  labs(x = "Estação", y = "Importância")
 
 # Absoluto do coeficiente para Lasso e Ridge
 varImp(lasso_full, lambda_lasso) %>%
-    rownames_to_column("termo") %>%
-    slice_max(Overall, n = n_var) %>%
-    ggplot(aes(reorder(termo, Overall, mean), Overall)) +
-    geom_col(fill = "dodgerblue3", width = width) +
-    coord_flip() +
-    labs(x = "Estação", y = "Importância")
+  rownames_to_column("termo") %>%
+  slice_max(Overall, n = n_var) %>%
+  ggplot(aes(reorder(termo, Overall, mean), Overall)) +
+  geom_col(fill = "dodgerblue3", width = width) +
+  coord_flip() +
+  labs(x = "Estação", y = "Importância")
 
 varImp(ridge_full, lambda_ridge) %>%
-    rownames_to_column("termo") %>%
-    slice_max(Overall, n = n_var) %>%
-    ggplot(aes(reorder(termo, Overall, mean), Overall)) +
-    geom_col(fill = "dodgerblue3", width = width) +
-    coord_flip() +
-    labs(x = "Estação", y = "Importância")
+  rownames_to_column("termo") %>%
+  slice_max(Overall, n = n_var) %>%
+  ggplot(aes(reorder(termo, Overall, mean), Overall)) +
+  geom_col(fill = "dodgerblue3", width = width) +
+  coord_flip() +
+  labs(x = "Estação", y = "Importância")
 ```
 
+Pela Figura \@ref(fig:importancias), as estações que pertencem ao rio são francisco foram as que tiveram a maior importância em todos os modelos. O modelo de boosting foi o único que não teve a vazão da semana anterior da estação 46998000 como o preditor mais importante.
