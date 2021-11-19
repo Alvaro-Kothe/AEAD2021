@@ -21,7 +21,7 @@ idx_tr <- setdiff(seq_len(n), idx_val)
 
 O conjunto de dados de dígitos manuscritos possui 60000 dígitos escritos a mão em imagens de dimensão $28 \times 28$. O conjunto de dados foi separado em conjunto de treino e validação, onde `r perc_val * 100`\% dos dados foi utilizado como conjunto de validação, ou seja, uma amostra de `r length(idx_tr)` dígitos será utilizada para construir os modelos, e os dígitos restantes serão utilizados para avaliar a qualidade de ajuste dos modelos.
 
-Em seguida os pixels foram normalizados para a escala $[0, 1],$ (equivalente a por a imagem na escala de cinza) para que alguns dos modelos utilizados convirjam mais rápido. 
+Os pixels foram normalizados para a escala $[0, 1],$ (equivalente a por a imagem na escala de cinza) para que alguns dos modelos utilizados convirjam mais rápido. 
 
 ```{r}
 # Como as matrizes das imagens possuem muito zero, uma matriz esparsa é
@@ -39,7 +39,7 @@ Com os dados normalizados e separados em conjunto de treino e teste, serão cons
 
 ### Modelo linear com regularização
 
-Como o problema é diferenciar 10 dígitos utilizando 784 pixels, isso indica que o problema é de classificação com mais de duas classes. Logo, será ajustado um modelo multinomial. E como diversos pixels não são preenchidos para escrever os dígitos, é interessante selecionar os pixels importantes para a classificação de cada dígito. Por isso, será ajustado um modelo Lasso Multinomial. Para a escolha do parâmetro de penalização, foi gerado 100 hiper-parâmetros de penalização, e foi escolhido o melhor hiper-parâmetro através de validação cruzada utilizando apenas o conjunto de treino.
+Como o problema é diferenciar 10 dígitos utilizando 784 pixels, isso indica que o problema é de classificação com mais de duas classes. Logo, será ajustado um modelo multinomial. Como diversos pixels não são preenchidos para escrever os dígitos, é interessante selecionar os pixels importantes para a classificação de cada dígito. Por isso, será utilizada a regularização Lasso. Para a escolha do parâmetro de penalização, foi gerado 100 hiper-parâmetros de penalização, e foi escolhido o melhor hiper-parâmetro através de validação cruzada utilizando apenas o conjunto de treino.
 
 
 
@@ -124,7 +124,7 @@ coef_nnulo <- lapply(
 
 # Coloca os gráficos em um grid 2x5
 layout(matrix(1:10, nrow = 2, byrow = TRUE))
-par(mar = c(.1, .1, .1, .1), xaxs = "i", yaxs = "i")
+par(mar = c(.2, .2, .2, .2), xaxs = "i", yaxs = "i")
 
 
 invisible(
@@ -204,7 +204,7 @@ Para a seleção dos hiper-parâmetros, mantendo o número de árvores fixo em 1
 - max_depth: 6
 - min_child_weight: 4
 
-Em seguida, foi selecionado o número de árvores a partir do conjunto de validação.
+Em seguida, foi selecionado o número de árvores a partir do conjunto de validação, em que o modelo para de ser ajustado após um certo número de iterações em que não teve melhora no conjunto de validação.
 
 ```{r xgboost mnist, cache=TRUE, include=FALSE}
 
@@ -410,7 +410,7 @@ acuracias_mnist <- acuracias_mnist %>%
   )
 ```
 
-## Comparação dos modelos
+### Comparação dos modelos
 
 Para a comparação dos modelos será utilizado a acurácia. Na Tabela \@ref(tab:tabela-modelos) é apresentado a acurácia para o conjunto de treino (Acurácia Dentro) e validação (Acurácia Fora).
 
@@ -423,7 +423,7 @@ kable(acuracias_mnist,
 ```
 
 
-Podemos ver pela Tabela \@ref(tab:tabela-modelos) que o modelo de rede neural foi o que teve as melhores predições no conjunto de validação. Nota-se também que o modelo de Boosting predizeu perfeitamente no conjunto de treino, o que mostra que esse modelo conseguiu decorar o conjunto de treino. Porém, conseguiu predizer corretamente na maior parte no conjunto de validação.
+Pela Tabela \@ref(tab:tabela-modelos), o modelo de rede neural foi o que teve as melhores predições no conjunto de validação. Nota-se também que o modelo de Boosting predizeu perfeitamente no conjunto de treino, o que mostra que esse modelo conseguiu decorar o conjunto de treino. Porém, conseguiu predizer corretamente na maior parte no conjunto de validação.
 
 Como o modelo de rede neural convolucional foi o que teve a maior acurácia no conjunto de validação, ele será o modelo escolhido para realizar as predições no conjunto de teste. Para apresentar um pouco das predições do modelo escolhida, na Figura \@ref(fig:matriz-confusao-rede) é apresentado a matriz de confusão do modelo no conjunto de validação.
 

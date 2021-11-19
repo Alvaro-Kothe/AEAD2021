@@ -14,7 +14,7 @@ Comparado ao conjunto de dados de dígitos MNIST, o conjunto de dados não possu
 
 ### Relação da variável resposta com os preditores.
 
-Na Figura \@ref(fig:resp-lag) é apresentado o gráfico de dispersão da estação resposta contra a sua defasagem de primeira ordem.
+Na Figura \@ref(fig:resp-lag), é apresentado o gráfico de dispersão da estação resposta contra a sua defasagem de primeira ordem.
 ```{r resp-lag, fig.cap="Gráfico da resposta contra a sua defasagem."}
 ggplot(treino_sf, aes(`46998000`, Y)) +
   geom_point() +
@@ -22,22 +22,23 @@ ggplot(treino_sf, aes(`46998000`, Y)) +
   labs(y = "Resposta", x = "Defasagem de primeira ordem")
 ```
 
-Pela Figura \@ref(fig:resp-lag), nota-se que existe uma forte relação linear entre a resposta e a sua defasagem.
+Pela Figura \@ref(fig:resp-lag), nota-se que existe uma forte relação linear entre a resposta e a sua defasagem. Na Figura \@ref(fig:corplot) é apresentado o correlograma das variáveis que tiveram as maiores correlações com a variável resposta.
 
-```{r corplot, fig.cap="Heatmap das variáveis com a maior correlação com a variável resposta."}
+```{r corplot, fig.cap="Matriz de correlação"}
 
 n_var <- 15
 
 corr <- cor(treino_sf, use = "pairwise.complete.obs")
-# Ordena pela correlação com a variável resposta `Y`
 
+# Ordena pela correlação com a variável resposta `Y`
 cor_srted <- order(abs(corr[, "Y"]), decreasing = TRUE)[seq_len(n_var)]
 
 corplot <- corr[cor_srted, cor_srted]
 
 corrplot.mixed(corplot,
   tl.pos = "lt", tl.col = "black",
-  number.cex = .6
+  number.cex = .6,
+  tl.cex = .8
 )
 ```
 
@@ -50,7 +51,7 @@ Todas as bacias que apresentaram correlação acima de 0.9 com a variável respo
 
 ### Correção de assimetria e escala
 
-É recomendado realizar transformações nas variáveis para que elas sejam normalmente distribuídas. O pacote *scikit-learn* fez um [exemplo](https://scikit-learn.org/stable/auto_examples/compose/plot_transformed_target.html#sphx-glr-auto-examples-compose-plot-transformed-target-py) para apresentar as vantagens de construir os modelos com a variável resposta transformada e em seguida realiza a transformação inversa para obter melhores predições. Um dos principais motivos para realizar esse tipo de transformação é para que pontos discrepantes não tenham um peso tão grande no modelo.
+É recomendado realizar transformações nas variáveis contínuas para que elas estejam simétricas em torno da média. O pacote *scikit-learn* fez um [exemplo](https://scikit-learn.org/stable/auto_examples/compose/plot_transformed_target.html#sphx-glr-auto-examples-compose-plot-transformed-target-py) que apresenta as vantagens de construir os modelos com a variável resposta transformada, e em seguida realiza a transformação inversa para obter melhores predições. Um dos principais motivos para realizar esse tipo de transformação é para que pontos discrepantes não tenham tanta influência no modelo.
 
 A Figura \@ref(fig:grafico-densidade-vazao)a apresenta as densidades das vazões e precipitações das estações até o quantil de 90\% de todas as estações. A Figura  \@ref(fig:grafico-densidade-vazao)b apresenta a densidade da variável resposta.
 
@@ -67,7 +68,7 @@ dados_vazoes_longo <- treino_sf %>%
 
 dados_vazoes_longo %>%
   filter(vazao < quantile(vazao, .90, na.rm = TRUE)) %>%
-  ggplot(aes(vazao, color = estacao, fill = estacao)) +
+  ggplot(aes(vazao, color = estacao)) +
   geom_density(show.legend = FALSE, alpha = .3) +
   labs(x = "Vazão", y = "Densidade")
 
@@ -296,7 +297,7 @@ print(best_nrounds)
 
 O modelo de floresta aleatória foi ajustado com a função `randomForest` do pacote com o mesmo nome.
 
-De acorto com o pacote `caret`, o principal hiper-parâmetro de floresta aleatória a ser otimizado é o número de variáveis amostradas em cada divisão da árvore (`mtry`). Para isso, foi escolhido aleatóriamente 10 valores para esse hiper-parâmetro, e foram comparados por validação cruzada fixando o número de árvores em 50. O parâmetro escolhido da amostra de 10 foi testado novamente, só que dessa vez comparado com 3 valores na frente e atrás, fixando o número de árvores em 100. O hiper-parâmetro `mtry` escolhido foi 54.
+De acorto com o pacote `caret`, o principal hiper-parâmetro de floresta aleatória a ser otimizado é o número de variáveis amostradas em cada divisão da árvore (`mtry`). Para isso, foi escolhido aleatóriamente 10 valores para esse hiper-parâmetro, e foram comparados por validação cruzada fixando o número de árvores em 50. O parâmetro escolhido dessa amostra foi testado novamente, só que dessa comparado com 3 valores anteriores e consecutivos a ele, fixando o número de árvores em 100. O hiper-parâmetro `mtry` escolhido foi 54.
 
 Após a seleção do hiper-parâmetro `mtry`, o modelo foi ajustado utilizando 500 árvores, que é o padrão do pacote `randomForest`.
 
@@ -443,7 +444,7 @@ Todos os modelos apresentaram erros estimados pela validação cruzada próximos
 Geralmente para ter melhores predições, as predições dos vários modelos de *machine learning* são misturadas. Uma das principais vantagens de misturar as predições é que evita o sobreajuste, e as predições são muito mais robustas. Existem diversas formas de misturar as predições, desde tomar a média delas, até construir modelos sobre essas predições.
 
 
-Todos os modelos foram ajustados novamente utilizando todo o conjuto de treino. E para as predições finais, será utilizada a média ponderada de todos os modelos ajustados, em que os pesos serão definidos a partir da performance dos modelos apresentadas na Figura \@ref(fig:boxplot-scores) e Tabela \@ref(tab:media-scores).
+Todos os modelos foram ajustados novamente utilizando todo o conjuto de treino. Para as predições finais, será utilizada a média ponderada de todos os modelos ajustados, em que os pesos serão definidos a partir da performance dos modelos apresentadas na Figura \@ref(fig:boxplot-scores) e Tabela \@ref(tab:media-scores).
 
 Após tomar a média ponderada será utilizada a transformação $\exp(x) - 1$ na média ponderada para que a vazão predita esteja na escala original da variável resposta. Logo, as predições no conjunto de teste são dadas por:
 \[\hat y = \exp\{0.240 \hat y_{F}  + 0.235 \hat y_{B} +
