@@ -49,5 +49,3 @@ po/*~
 # Arquivos temporarios e produtos finais
 *.log
 *.csv
-*.pdf
-TODO.md
